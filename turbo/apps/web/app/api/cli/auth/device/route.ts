@@ -3,6 +3,15 @@ import { cliAuthDeviceContract } from "@vm0/core";
 import crypto from "crypto";
 import { initServices } from "../../../../../src/lib/init-services";
 import { deviceCodes } from "../../../../../src/db/schema/device-codes";
+import {
+  checkRateLimit,
+  getClientIp,
+} from "../../../../../src/lib/rate-limit";
+import { NextResponse } from "next/server";
+
+// Rate limit: 10 requests per minute per IP
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 // Characters that are easy to read (excluding 0/O, 1/I/L)
 const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -50,6 +59,40 @@ const router = tsr.router(cliAuthDeviceContract, {
   },
 });
 
-const handler = createHandler(cliAuthDeviceContract, router);
+const tsRestHandler = createHandler(cliAuthDeviceContract, router);
 
-export { handler as POST };
+/**
+ * POST handler with rate limiting.
+ *
+ * Rate limiting is applied before the ts-rest handler to prevent
+ * abuse of device code creation. Uses OAuth "slow_down" error format.
+ */
+async function POST(request: Request): Promise<Response> {
+  const clientIp = getClientIp(request);
+  const rateLimitKey = `device:${clientIp}`;
+
+  const { allowed, retryAfter } = checkRateLimit(
+    rateLimitKey,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS,
+  );
+
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error: "slow_down",
+        error_description: `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfter),
+        },
+      },
+    );
+  }
+
+  return tsRestHandler(request);
+}
+
+export { POST };
