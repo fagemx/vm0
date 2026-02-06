@@ -183,3 +183,16 @@ describe("METHOD /api/path/to/route", () => {
 2. **每個測試都驗 response.status** — 即使是 error case 也要先 `expect(response.status).toBe(xxx)`
 3. **error case 驗 body** — 401/404 等測試除了驗 status，也要驗 `body.error.code`（如 `"UNAUTHORIZED"`、`"NOT_FOUND"`）
 4. **success case 驗 shape** — 成功回應除了驗特定欄位值，加一個結構斷言（如 `not.toHaveProperty("error")`）
+
+---
+
+## 11. 驗證步驟（必做）
+
+寫完測試後，依序執行以下驗證，全部通過才算完成：
+
+1. **跑測試** — `DATABASE_URL=postgresql://ubuntu:vm0dev@localhost:5432/vm0_dev pnpm vitest run <你的測試檔路徑>`
+2. **跑 lint** — `pnpm turbo run lint --filter=web`
+3. **跑 prettier** — `pnpm prettier --check <你修改的檔案>`，有問題用 `pnpm prettier --write` 修正
+4. **跑 type check** — `pnpm check-types --filter=web`
+
+> Batch #3 教訓：teammates 跑了 lint 但漏了 prettier，導致 CI 失敗。
