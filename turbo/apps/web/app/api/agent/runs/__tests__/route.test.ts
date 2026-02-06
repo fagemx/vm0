@@ -22,6 +22,7 @@ import {
   type UserContext,
 } from "../../../../../src/__tests__/test-helpers";
 import { mockClerk } from "../../../../../src/__tests__/clerk-mock";
+import { agentRuns } from "../../../../../src/db/schema/agent-run";
 
 vi.mock("@clerk/nextjs/server");
 vi.mock("@e2b/code-interpreter");
@@ -702,6 +703,71 @@ describe("POST /api/agent/runs - Internal Runs API", () => {
             body: JSON.stringify({
               agentComposeId: testComposeId,
               prompt: "Fourth run",
+            }),
+          },
+        );
+
+        const response = await POST(request);
+        expect(response.status).toBe(429);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("should not count stale pending runs toward concurrency limit", async () => {
+      vi.stubEnv("CONCURRENT_RUN_LIMIT", "1");
+
+      try {
+        // Get a valid agentComposeVersionId from an existing compose
+        const { versionId } = await createTestCompose(uniqueId("stale"));
+
+        // Insert a "pending" run directly into DB with old createdAt (20 minutes ago)
+        // This simulates a run stuck in pending state past the TTL
+        const staleCreatedAt = new Date(Date.now() - 20 * 60 * 1000);
+        await globalThis.services.db.insert(agentRuns).values({
+          userId: user.userId,
+          agentComposeVersionId: versionId,
+          status: "pending",
+          prompt: "Stale pending run",
+          createdAt: staleCreatedAt,
+          lastHeartbeatAt: staleCreatedAt,
+        });
+
+        // New run should succeed because the stale pending run (>15min) is excluded
+        const run = await createTestRun(testComposeId, "Should not be blocked");
+        expect(run.status).toBe("running");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("should still count running runs older than TTL toward concurrency limit", async () => {
+      vi.stubEnv("CONCURRENT_RUN_LIMIT", "1");
+
+      try {
+        // Record time when run is created
+        const runCreationTime = Date.now();
+
+        // First run should succeed and stay running
+        const run1 = await createTestRun(testComposeId, "Long running task");
+        expect(run1.status).toBe("running");
+
+        // Advance time past the pending TTL (16 minutes)
+        // Running runs should STILL count regardless of age
+        context.mocks.dateNow.mockReturnValue(
+          runCreationTime + 16 * 60 * 1000,
+        );
+
+        // Second run should still fail because the first run is "running"
+        // (running runs are always counted, even if older than TTL)
+        const request = createTestRequest(
+          "http://localhost:3000/api/agent/runs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agentComposeId: testComposeId,
+              prompt: "Should be blocked",
             }),
           },
         );

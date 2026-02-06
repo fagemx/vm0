@@ -1,4 +1,4 @@
-import { eq, and, count, inArray, gt } from "drizzle-orm";
+import { eq, and, count, gt, or } from "drizzle-orm";
 import { checkpoints } from "../../db/schema/checkpoint";
 import { agentRuns } from "../../db/schema/agent-run";
 import {
@@ -22,8 +22,10 @@ import {
 
 const log = logger("service:run");
 
-// Pending runs older than this are considered stale and excluded from concurrency check
-const PENDING_RUN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// Defense-in-depth: exclude pending runs older than this from concurrency check.
+// The cleanup-sandboxes cron job already transitions pending runs to "timeout" after 5 minutes,
+// so this TTL only matters if the cron job fails to run.
+const PENDING_RUN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 // Re-export for backward compatibility
 export { calculateSessionHistoryPath } from "./utils/session-history-path";
@@ -63,7 +65,7 @@ export async function checkRunConcurrencyLimit(
     return;
   }
 
-  // Exclude stale pending runs (older than TTL) from concurrency check
+  // Count active runs: all "running" runs + "pending" runs within TTL
   const staleThreshold = new Date(Date.now() - PENDING_RUN_TTL_MS);
 
   const [result] = await globalThis.services.db
@@ -72,8 +74,13 @@ export async function checkRunConcurrencyLimit(
     .where(
       and(
         eq(agentRuns.userId, userId),
-        inArray(agentRuns.status, ["pending", "running"]),
-        gt(agentRuns.createdAt, staleThreshold),
+        or(
+          eq(agentRuns.status, "running"),
+          and(
+            eq(agentRuns.status, "pending"),
+            gt(agentRuns.createdAt, staleThreshold),
+          ),
+        ),
       ),
     );
 
