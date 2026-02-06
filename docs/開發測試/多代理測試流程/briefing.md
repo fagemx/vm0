@@ -174,3 +174,12 @@ describe("METHOD /api/path/to/route", () => {
 3. **non-null assertion (!) 要確保型別正確** — helper return type 要明確
 4. **import 路徑數 `../` 的層數要正確** — 從 __tests__ 目錄算起
 5. **不要 mock 內部模組** — 只 mock 外部依賴（@clerk, @e2b, @aws-sdk 等）
+
+---
+
+## 10. 程式碼風格
+
+1. **提取 local helper** — 如果同一個 `createTestRequest(...)` 呼叫出現 2 次以上，提取成像 `makeDeviceRequest()` 或 `deleteProvider(type)` 的小 helper，放在 `describe` 之前
+2. **每個測試都驗 response.status** — 即使是 error case 也要先 `expect(response.status).toBe(xxx)`
+3. **error case 驗 body** — 401/404 等測試除了驗 status，也要驗 `body.error.code`（如 `"UNAUTHORIZED"`、`"NOT_FOUND"`）
+4. **success case 驗 shape** — 成功回應除了驗特定欄位值，加一個結構斷言（如 `not.toHaveProperty("error")`）
