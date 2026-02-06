@@ -264,12 +264,14 @@ export async function createTestDeviceCode(options?: {
 }): Promise<string> {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   const part = () =>
-    Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    Array.from(
+      { length: 4 },
+      () => chars[Math.floor(Math.random() * chars.length)],
+    ).join("");
   const code = `${part()}-${part()}`;
 
   const status = options?.status ?? "pending";
-  const expiresAt =
-    options?.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000);
+  const expiresAt = options?.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000);
 
   await globalThis.services.db.insert(deviceCodes).values({
     code,

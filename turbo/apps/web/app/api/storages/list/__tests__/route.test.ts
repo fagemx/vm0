@@ -18,9 +18,7 @@ const context = testContext();
 
 function listStorages(type: string) {
   return GET(
-    createTestRequest(
-      `http://localhost:3000/api/storages/list?type=${type}`,
-    ),
+    createTestRequest(`http://localhost:3000/api/storages/list?type=${type}`),
   );
 }
 
