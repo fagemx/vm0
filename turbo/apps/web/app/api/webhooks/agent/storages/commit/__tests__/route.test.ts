@@ -105,7 +105,7 @@ describe("POST /api/webhooks/agent/storages/commit", () => {
 
   it("should return 404 when storage does not exist", async () => {
     const request = makeCommitRequest(testRunId, testToken, {
-      storageName: `nonexistent-${Date.now()}`,
+      storageName: uniqueId("nonexistent"),
       storageType: "volume",
       versionId: "abc123",
       files: [],
@@ -119,7 +119,7 @@ describe("POST /api/webhooks/agent/storages/commit", () => {
   });
 
   it("should return 400 when versionId does not match", async () => {
-    const storageName = `webhook-mismatch-${Date.now()}`;
+    const storageName = uniqueId("webhook-mismatch");
     const files = [{ path: "test.txt", hash: "a".repeat(64), size: 100 }];
 
     // Create storage via webhook prepare
@@ -141,7 +141,7 @@ describe("POST /api/webhooks/agent/storages/commit", () => {
   });
 
   it("should commit version and return success", async () => {
-    const storageName = `webhook-success-${Date.now()}`;
+    const storageName = uniqueId("webhook-success");
     const files = [
       { path: "file1.txt", hash: "c".repeat(64), size: 100 },
       { path: "file2.txt", hash: "d".repeat(64), size: 200 },
@@ -174,7 +174,7 @@ describe("POST /api/webhooks/agent/storages/commit", () => {
   });
 
   it("should return deduplicated=true for idempotent re-commit", async () => {
-    const storageName = `webhook-idempotent-${Date.now()}`;
+    const storageName = uniqueId("webhook-idempotent");
     const files = [{ path: "test.txt", hash: "e".repeat(64), size: 100 }];
 
     const versionId = await prepareStorage(

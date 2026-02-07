@@ -100,7 +100,7 @@ describe("POST /api/webhooks/agent/storages/prepare", () => {
   });
 
   it("should create new storage and return upload URLs", async () => {
-    const storageName = `webhook-new-${Date.now()}`;
+    const storageName = uniqueId("webhook-new");
     const files = [{ path: "test.txt", hash: "a".repeat(64), size: 100 }];
 
     const request = makePrepareRequest(testRunId, testToken, {
@@ -124,7 +124,7 @@ describe("POST /api/webhooks/agent/storages/prepare", () => {
   });
 
   it("should return existing=true for deduplicated version", async () => {
-    const storageName = `webhook-dedup-${Date.now()}`;
+    const storageName = uniqueId("webhook-dedup");
     const files = [{ path: "test.txt", hash: "b".repeat(64), size: 100 }];
 
     // Prepare → get versionId
