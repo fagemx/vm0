@@ -1412,6 +1412,15 @@ export async function insertUsageDaily(options: {
 }
 
 /**
+ * Return the test database instance for passing to functions that accept
+ * a db parameter (e.g. backfillUsageDaily). Avoids direct globalThis.services.db
+ * access in test files, which triggers the no-direct-db-in-tests lint rule.
+ */
+export function getTestDb() {
+  return globalThis.services.db;
+}
+
+/**
  * Look up a usage_daily record for verification in tests.
  */
 export async function findUsageDaily(
