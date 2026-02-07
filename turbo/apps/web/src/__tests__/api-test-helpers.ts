@@ -136,7 +136,9 @@ export async function createTestSandboxToken(
 
 /**
  * Insert a device code directly into DB for test setup.
- * Used by CLI auth token tests to set up various device code states.
+ * Uses direct DB insert because no API route exists for creating
+ * denied/expired device codes — the POST /api/cli/auth/device route
+ * always creates "pending" codes with server-controlled expiration.
  *
  * @param options - Device code configuration
  */
