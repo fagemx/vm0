@@ -14,6 +14,8 @@ vi.mock("@e2b/code-interpreter");
 vi.mock("@aws-sdk/client-s3");
 vi.mock("@aws-sdk/s3-request-presigner");
 vi.mock("@axiomhq/js");
+// Internal mock: realtime/client.ts uses `import "server-only"` and creates
+// a singleton from process.env.ABLY_API_KEY, making vi.mock("ably") insufficient.
 vi.mock("../../../../../src/lib/realtime/client");
 
 const context = testContext();
