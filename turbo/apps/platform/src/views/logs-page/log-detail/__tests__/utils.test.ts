@@ -542,6 +542,51 @@ describe("log-detail utils", () => {
       );
     });
 
+    it("should link tool_result to tool_use when events arrive out of order", () => {
+      const events: AgentEvent[] = [
+        {
+          sequenceNumber: 2,
+          eventType: "user",
+          eventData: {
+            message: {
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "tool_bash_1",
+                  content: "file1.txt\nfile2.txt",
+                },
+              ],
+            },
+          },
+          createdAt: "2024-01-01T00:00:01Z",
+        },
+        {
+          sequenceNumber: 1,
+          eventType: "assistant",
+          eventData: {
+            message: {
+              content: [
+                {
+                  type: "tool_use",
+                  id: "tool_bash_1",
+                  name: "Bash",
+                  input: { command: "ls" },
+                },
+              ],
+            },
+          },
+          createdAt: "2024-01-01T00:00:00Z",
+        },
+      ];
+      const result = groupEventsIntoMessages(events);
+      const toolOp = result
+        .flatMap((m) => m.toolOperations ?? [])
+        .find((op) => op.toolUseId === "tool_bash_1");
+      expect(toolOp).toBeDefined();
+      expect(toolOp!.toolName).toBe("Bash");
+      expect(toolOp!.result?.content).toBe("file1.txt\nfile2.txt");
+    });
+
     it("should extract key param for file operations", () => {
       const events: AgentEvent[] = [
         {
