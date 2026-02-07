@@ -174,6 +174,7 @@ describe("METHOD /api/path/to/route", () => {
 3. **non-null assertion (!) 要確保型別正確** — helper return type 要明確
 4. **import 路徑數 `../` 的層數要正確** — 從 __tests__ 目錄算起
 5. **不要 mock 內部模組** — 只 mock 外部依賴（@clerk, @e2b, @aws-sdk 等）。如果覺得「不得不用 internal mock」，參考下方第 9.1 節的解法。
+6. **唯一名稱用 `uniqueId()`，不要用 `Date.now()`** — `uniqueId("prefix")` 產生 `prefix-a1b2c3d4` 格式，測試隔離更可靠。參考同類型既有測試的慣例（webhook→webhook, API→API）。
 
 ### 9.1 遇到「好像需要 internal mock」的情況怎麼辦
 
