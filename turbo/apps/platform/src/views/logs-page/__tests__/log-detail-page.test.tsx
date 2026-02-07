@@ -105,6 +105,77 @@ describe("log detail page", () => {
     expect(screen.getByText("Session ID")).toBeInTheDocument(); // Session label (desktop only)
   });
 
+  it("should display user prompt when present", async () => {
+    server.use(
+      http.get("*/api/platform/logs/:id", () => {
+        return HttpResponse.json({
+          id: "run-prompt-test",
+          sessionId: null,
+          agentName: "Prompt Agent",
+          framework: "claude-code",
+          status: "completed",
+          prompt: "Summarize the quarterly report",
+          error: null,
+          createdAt: "2024-01-01T00:00:00Z",
+          startedAt: "2024-01-01T00:00:01Z",
+          completedAt: "2024-01-01T00:00:10Z",
+          artifact: { name: null, version: null },
+        });
+      }),
+      http.get("*/api/agent/runs/:id/telemetry/agent", () => {
+        return HttpResponse.json(createDefaultAgentEventsResponse());
+      }),
+    );
+
+    await setupPage({
+      context,
+      path: "/logs/run-prompt-test",
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Prompt")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("Summarize the quarterly report"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not display prompt section when prompt is empty", async () => {
+    server.use(
+      http.get("*/api/platform/logs/:id", () => {
+        return HttpResponse.json({
+          id: "run-no-prompt",
+          sessionId: null,
+          agentName: "No Prompt Agent",
+          framework: "claude-code",
+          status: "completed",
+          prompt: "",
+          error: null,
+          createdAt: "2024-01-01T00:00:00Z",
+          startedAt: "2024-01-01T00:00:01Z",
+          completedAt: "2024-01-01T00:00:10Z",
+          artifact: { name: null, version: null },
+        });
+      }),
+      http.get("*/api/agent/runs/:id/telemetry/agent", () => {
+        return HttpResponse.json(createDefaultAgentEventsResponse());
+      }),
+    );
+
+    await setupPage({
+      context,
+      path: "/logs/run-no-prompt",
+    });
+
+    // Wait for page to load
+    await waitFor(() => {
+      expect(screen.getAllByText("No Prompt Agent").length).toBeGreaterThan(0);
+    });
+
+    // Prompt section should not be rendered
+    expect(screen.queryByText("Prompt")).not.toBeInTheDocument();
+  });
+
   it("should display duration correctly", async () => {
     server.use(
       http.get("*/api/platform/logs/:id", () => {
@@ -390,9 +461,9 @@ describe("log detail page", () => {
 
   describe("search functionality", () => {
     function createSearchTestResponse() {
-      // Note: user events with plain text are not shown in formatted view
-      // (user prompts are not displayed), so we use 3 assistant messages
-      // to test the search functionality with 3 "world" matches
+      // User prompts are displayed in a separate section above the events card,
+      // so we use 3 assistant messages to test the search functionality
+      // with 3 "world" matches
       return {
         events: [
           {
