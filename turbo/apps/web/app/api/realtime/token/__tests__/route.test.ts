@@ -7,16 +7,27 @@ import {
 } from "../../../../../src/__tests__/api-test-helpers";
 import { testContext } from "../../../../../src/__tests__/test-helpers";
 import { mockClerk } from "../../../../../src/__tests__/clerk-mock";
-import { generateRunToken } from "../../../../../src/lib/realtime/client";
 
 vi.mock("@clerk/nextjs/server");
 vi.mock("@e2b/code-interpreter");
 vi.mock("@aws-sdk/client-s3");
 vi.mock("@aws-sdk/s3-request-presigner");
 vi.mock("@axiomhq/js");
-// Internal mock: realtime/client.ts uses `import "server-only"` and creates
-// a singleton from process.env.ABLY_API_KEY, making vi.mock("ably") insufficient.
-vi.mock("../../../../../src/lib/realtime/client");
+
+const { mockCreateTokenRequest } = vi.hoisted(() => {
+  const mockCreateTokenRequest = vi.fn();
+  vi.stubEnv("ABLY_API_KEY", "test-ably-key");
+  return { mockCreateTokenRequest };
+});
+
+vi.mock("ably", () => ({
+  default: {
+    Rest: vi.fn(() => ({
+      auth: { createTokenRequest: mockCreateTokenRequest },
+      channels: { get: () => ({ publish: vi.fn() }) },
+    })),
+  },
+}));
 
 const context = testContext();
 
@@ -34,6 +45,7 @@ describe("POST /api/realtime/token", () => {
   beforeEach(async () => {
     context.setupMocks();
     await context.setupUser();
+    mockCreateTokenRequest.mockReset();
   });
 
   it("should return 401 when not authenticated", async () => {
@@ -72,7 +84,7 @@ describe("POST /api/realtime/token", () => {
     const { composeId } = await createTestCompose("test-agent");
     const { runId } = await createTestRun(composeId, "test prompt");
 
-    vi.mocked(generateRunToken).mockResolvedValue(null);
+    mockCreateTokenRequest.mockRejectedValue(new Error("Ably unavailable"));
 
     const response = await postToken(runId);
     const body = await response.json();
@@ -94,7 +106,7 @@ describe("POST /api/realtime/token", () => {
       nonce: "test-nonce",
       mac: "test-mac",
     };
-    vi.mocked(generateRunToken).mockResolvedValue(mockTokenRequest);
+    mockCreateTokenRequest.mockResolvedValue(mockTokenRequest);
 
     const response = await postToken(runId);
     const body = await response.json();
