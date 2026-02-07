@@ -23,6 +23,8 @@ import {
   prepareAndDispatchRun,
 } from "../run/run-service";
 import { generateSandboxToken } from "../auth/sandbox-token";
+import { getUserScopeByClerkId } from "../scope/scope-service";
+import { getSecretValues } from "../secret/secret-service";
 
 const log = logger("service:schedule");
 
@@ -300,6 +302,7 @@ export async function deploySchedule(
       // Determine effective secrets for validation:
       // - If request.secrets is provided, use those
       // - If request.secrets is undefined AND updating, use existing schedule's secrets
+      // - Also include platform-managed secrets (stored via `vm0 secret set`)
       const providedSecrets = request.secrets
         ? Object.keys(request.secrets)
         : [];
@@ -316,10 +319,18 @@ export async function deploySchedule(
         }
       }
 
+      // Fetch platform-managed user secrets from DB
+      let platformSecretNames: string[] = [];
+      const userScope = await getUserScopeByClerkId(userId);
+      if (userScope) {
+        const platformSecrets = await getSecretValues(userScope.id, "user");
+        platformSecretNames = Object.keys(platformSecrets);
+      }
+
       const effectiveSecretNames =
         request.secrets === undefined && existing
-          ? existingSecretNames
-          : providedSecrets;
+          ? [...existingSecretNames, ...platformSecretNames]
+          : [...providedSecrets, ...platformSecretNames];
 
       const missingSecrets = required.secrets.filter(
         (name) => !effectiveSecretNames.includes(name),

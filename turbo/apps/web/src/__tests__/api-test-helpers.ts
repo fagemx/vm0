@@ -42,7 +42,10 @@ import { POST as storagePrepareRoute } from "../../app/api/storages/prepare/rout
 import { POST as storageCommitRoute } from "../../app/api/storages/commit/route";
 import { DELETE as deleteModelProviderRoute } from "../../app/api/model-providers/[type]/route";
 import { GET as listModelProvidersRoute } from "../../app/api/model-providers/route";
-import { GET as listSecretsRoute } from "../../app/api/secrets/route";
+import {
+  GET as listSecretsRoute,
+  PUT as setSecretRoute,
+} from "../../app/api/secrets/route";
 import { POST as addPermissionRoute } from "../../app/api/agent/composes/[id]/permissions/route";
 import { connectors } from "../db/schema/connector";
 import { connectorSessions } from "../db/schema/connector-session";
@@ -1035,6 +1038,28 @@ export async function listTestSecrets(): Promise<
   }
   const data = await response.json();
   return data.secrets;
+}
+
+/**
+ * Create a platform-managed secret via PUT /api/secrets.
+ * Simulates `vm0 secret set NAME VALUE`.
+ */
+export async function createTestSecret(
+  name: string,
+  value: string,
+): Promise<void> {
+  const request = createTestRequest("http://localhost:3000/api/secrets", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, value }),
+  });
+  const response = await setSecretRoute(request);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(
+      `Failed to create secret: ${error.error?.message || response.status}`,
+    );
+  }
 }
 
 /**
