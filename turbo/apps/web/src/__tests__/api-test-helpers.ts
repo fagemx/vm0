@@ -15,6 +15,7 @@ import { cliTokens } from "../db/schema/cli-tokens";
 import { deviceCodes } from "../db/schema/device-codes";
 import { agentRuns } from "../db/schema/agent-run";
 import { composeJobs } from "../db/schema/compose-job";
+import { storages, storageVersions } from "../db/schema/storage";
 import { eq } from "drizzle-orm";
 
 // Route handlers - imported here so callers don't need to pass them
@@ -956,6 +957,38 @@ export async function createTestVolume(
   fileCount: number;
 }> {
   return createTestStorage(name, { ...options, type: "volume" });
+}
+
+/**
+ * Insert an extra storage version record with a controlled ID.
+ * Used to create deterministic ambiguous-prefix test scenarios where
+ * two versions share the same prefix but the content hash is different.
+ *
+ * @param storageName - Name of an existing storage (must already have a version)
+ * @param versionId - The 64-char hex version ID to insert
+ */
+export async function insertStorageVersion(
+  storageName: string,
+  versionId: string,
+): Promise<void> {
+  const [storage] = await globalThis.services.db
+    .select()
+    .from(storages)
+    .where(eq(storages.name, storageName))
+    .limit(1);
+
+  if (!storage) {
+    throw new Error(`Storage "${storageName}" not found`);
+  }
+
+  await globalThis.services.db.insert(storageVersions).values({
+    id: versionId,
+    storageId: storage.id,
+    s3Key: `test/${versionId}`,
+    size: 0,
+    fileCount: 0,
+    createdBy: "test",
+  });
 }
 
 // ============================================================================
