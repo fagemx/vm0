@@ -5,6 +5,8 @@ import {
   createTestCompose,
   createTestRun,
   completeTestRun,
+  insertUsageDaily,
+  createCompletedTestRun,
 } from "../../../../src/__tests__/api-test-helpers";
 import {
   testContext,
@@ -211,5 +213,143 @@ describe("GET /api/usage", () => {
     expect(data.summary.total_runs).toBe(2);
     // Run 1: 60000ms (1 min) + Run 2: 120000ms (2 min) = 180000ms
     expect(data.summary.total_run_time_ms).toBe(180000);
+  });
+
+  describe("hybrid query (usage_daily + agent_runs)", () => {
+    let composeVersionId: string;
+
+    beforeEach(async () => {
+      const { versionId } = await createTestCompose(uniqueId("hybrid"));
+      composeVersionId = versionId;
+    });
+
+    it("should combine historical usage_daily with boundary agent_runs", async () => {
+      const now = new Date();
+      const fiveDaysAgo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 5),
+      );
+      const threeDaysAgo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 3),
+      );
+      const twoDaysAgo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 2),
+      );
+      const threeDaysAgoStr = threeDaysAgo.toISOString().split("T")[0]!;
+      const twoDaysAgoStr = twoDaysAgo.toISOString().split("T")[0]!;
+
+      // Insert pre-aggregated historical data (complete days)
+      await insertUsageDaily({
+        userId: user.userId,
+        date: threeDaysAgoStr,
+        runCount: 5,
+        runTimeMs: 50000,
+      });
+      await insertUsageDaily({
+        userId: user.userId,
+        date: twoDaysAgoStr,
+        runCount: 3,
+        runTimeMs: 30000,
+      });
+
+      // Query with midnight start (so 3 and 2 days ago are complete historical days)
+      const request = createTestRequest(
+        `http://localhost:3000/api/usage?start_date=${fiveDaysAgo.toISOString()}&end_date=${now.toISOString()}`,
+      );
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.summary.total_runs).toBe(8);
+      expect(data.summary.total_run_time_ms).toBe(80000);
+      expect(data.daily.length).toBe(2);
+    });
+
+    it("should use agent_runs for partial start day boundary", async () => {
+      const now = new Date();
+      const twoDaysAgo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 2),
+      );
+      const twoDaysAgoStr = twoDaysAgo.toISOString().split("T")[0]!;
+
+      // Insert usage_daily for 2 days ago (full day aggregate)
+      await insertUsageDaily({
+        userId: user.userId,
+        date: twoDaysAgoStr,
+        runCount: 10,
+        runTimeMs: 100000,
+      });
+
+      // Create a run 2 days ago at 14:00 (for partial day test)
+      const partialDayStart = new Date(twoDaysAgo.getTime() + 14 * 3600000);
+      await createCompletedTestRun({
+        composeVersionId,
+        userId: user.userId,
+        createdAt: partialDayStart,
+        startedAt: partialDayStart,
+        completedAt: new Date(partialDayStart.getTime() + 5000),
+      });
+
+      // Query starting at 14:00 of 2 days ago (partial day — should NOT use usage_daily)
+      const request = createTestRequest(
+        `http://localhost:3000/api/usage?start_date=${partialDayStart.toISOString()}&end_date=${now.toISOString()}`,
+      );
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+
+      // The partial start day should come from agent_runs (1 run), not usage_daily (10 runs)
+      const partialDay = data.daily.find(
+        (d: { date: string }) => d.date === twoDaysAgoStr,
+      );
+      expect(partialDay).toBeDefined();
+      expect(partialDay.run_count).toBe(1);
+    });
+
+    it("should not double-count when usage_daily exists", async () => {
+      const now = new Date();
+      const fiveDaysAgo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 5),
+      );
+      const fourDaysAgo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 4),
+      );
+      const fourDaysAgoStr = fourDaysAgo.toISOString().split("T")[0]!;
+
+      // Insert usage_daily for 4 days ago
+      await insertUsageDaily({
+        userId: user.userId,
+        date: fourDaysAgoStr,
+        runCount: 7,
+        runTimeMs: 70000,
+      });
+
+      // Also create an agent_run for 4 days ago (this should NOT be double-counted
+      // because usage_daily covers this complete day)
+      const fourDaysAgoRun = new Date(fourDaysAgo.getTime() + 10 * 3600000);
+      await createCompletedTestRun({
+        composeVersionId,
+        userId: user.userId,
+        createdAt: fourDaysAgoRun,
+        startedAt: fourDaysAgoRun,
+        completedAt: new Date(fourDaysAgoRun.getTime() + 3000),
+      });
+
+      // Query with midnight start (so 4 days ago is a complete historical day)
+      const request = createTestRequest(
+        `http://localhost:3000/api/usage?start_date=${fiveDaysAgo.toISOString()}&end_date=${now.toISOString()}`,
+      );
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+
+      // 4 days ago should come from usage_daily (7 runs), not agent_runs
+      const day = data.daily.find(
+        (d: { date: string }) => d.date === fourDaysAgoStr,
+      );
+      expect(day).toBeDefined();
+      expect(day.run_count).toBe(7);
+    });
   });
 });

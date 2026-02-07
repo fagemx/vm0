@@ -1394,6 +1394,24 @@ export async function createCompletedTestRun(options: {
 }
 
 /**
+ * Insert a usage_daily record for testing hybrid query in /api/usage.
+ * Simulates pre-aggregated historical data without running the cron.
+ */
+export async function insertUsageDaily(options: {
+  userId: string;
+  date: string;
+  runCount: number;
+  runTimeMs: number;
+}): Promise<void> {
+  await globalThis.services.db.insert(usageDaily).values({
+    userId: options.userId,
+    date: options.date,
+    runCount: options.runCount,
+    runTimeMs: options.runTimeMs,
+  });
+}
+
+/**
  * Look up a usage_daily record for verification in tests.
  */
 export async function findUsageDaily(

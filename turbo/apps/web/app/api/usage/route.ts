@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initServices } from "../../../src/lib/init-services";
 import { getUserId } from "../../../src/lib/auth/get-user-id";
 import { agentRuns } from "../../../src/db/schema/agent-run";
+import { usageDaily } from "../../../src/db/schema/usage-daily";
 import { sql, and, gte, lt, eq, isNotNull } from "drizzle-orm";
 
 /**
@@ -13,6 +14,8 @@ const MAX_RANGE_MS = 30 * 24 * 60 * 60 * 1000;
  * Default time range (7 days in milliseconds)
  */
 const DEFAULT_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const MS_PER_DAY = 86400000;
 
 interface DailyUsage {
   date: string;
@@ -32,6 +35,47 @@ interface UsageResponse {
   daily: DailyUsage[];
 }
 
+function utcMidnight(d: Date): Date {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+}
+
+async function queryAgentRunsDaily(
+  db: typeof globalThis.services.db,
+  userId: string,
+  from: Date,
+  to: Date,
+): Promise<DailyUsage[]> {
+  if (from >= to) return [];
+
+  const rows = await db
+    .select({
+      date: sql<string>`DATE(${agentRuns.createdAt})`.as("date"),
+      run_count: sql<number>`COUNT(*)::int`.as("run_count"),
+      run_time_ms:
+        sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (${agentRuns.completedAt} - ${agentRuns.startedAt})) * 1000), 0)::bigint`.as(
+          "run_time_ms",
+        ),
+    })
+    .from(agentRuns)
+    .where(
+      and(
+        eq(agentRuns.userId, userId),
+        gte(agentRuns.createdAt, from),
+        lt(agentRuns.createdAt, to),
+        isNotNull(agentRuns.completedAt),
+      ),
+    )
+    .groupBy(sql`DATE(${agentRuns.createdAt})`);
+
+  return rows.map((row) => ({
+    date: String(row.date),
+    run_count: Number(row.run_count),
+    run_time_ms: Number(row.run_time_ms),
+  }));
+}
+
 /**
  * GET /api/usage
  *
@@ -40,6 +84,8 @@ interface UsageResponse {
  * - end_date: ISO date string (default: now)
  *
  * Returns daily aggregated usage statistics for the authenticated user.
+ * Uses a hybrid query: pre-aggregated usage_daily for historical complete days,
+ * and real-time agent_runs for boundary days and today.
  */
 export async function GET(request: NextRequest) {
   initServices();
@@ -125,44 +171,73 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Query daily aggregation
-  // Using raw SQL for DATE() function and aggregation
-  const dailyResults = await globalThis.services.db
-    .select({
-      date: sql<string>`DATE(${agentRuns.createdAt})`.as("date"),
-      run_count: sql<number>`COUNT(*)::int`.as("run_count"),
-      run_time_ms:
-        sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (${agentRuns.completedAt} - ${agentRuns.startedAt})) * 1000), 0)::bigint`.as(
-          "run_time_ms",
-        ),
-    })
-    .from(agentRuns)
-    .where(
-      and(
-        eq(agentRuns.userId, userId),
-        gte(agentRuns.createdAt, startDate),
-        lt(agentRuns.createdAt, endDate),
-        isNotNull(agentRuns.completedAt),
-      ),
-    )
-    .groupBy(sql`DATE(${agentRuns.createdAt})`)
-    .orderBy(sql`DATE(${agentRuns.createdAt}) DESC`);
+  // Hybrid query: usage_daily for complete historical days, agent_runs for boundaries
+  const db = globalThis.services.db;
+  const todayMidnight = utcMidnight(now);
+  const startMidnight = utcMidnight(startDate);
+  const endMidnight = utcMidnight(endDate);
 
-  // Calculate totals
+  // Complete historical day range: days fully within [startDate, endDate) and before today
+  const historicalFrom =
+    startDate.getTime() === startMidnight.getTime()
+      ? startMidnight
+      : new Date(startMidnight.getTime() + MS_PER_DAY);
+  const historicalTo =
+    endMidnight < todayMidnight ? endMidnight : todayMidnight;
+
+  const daily: DailyUsage[] = [];
+
+  if (historicalFrom >= historicalTo) {
+    // No complete historical days — use agent_runs for entire range
+    daily.push(...(await queryAgentRunsDaily(db, userId, startDate, endDate)));
+  } else {
+    // Part 1: partial start day from agent_runs [startDate, historicalFrom)
+    daily.push(
+      ...(await queryAgentRunsDaily(db, userId, startDate, historicalFrom)),
+    );
+
+    // Part 2: complete historical days from usage_daily
+    const fromStr = historicalFrom.toISOString().split("T")[0]!;
+    const toStr = historicalTo.toISOString().split("T")[0]!;
+
+    const historicalRows = await db
+      .select({
+        date: usageDaily.date,
+        runCount: usageDaily.runCount,
+        runTimeMs: usageDaily.runTimeMs,
+      })
+      .from(usageDaily)
+      .where(
+        and(
+          eq(usageDaily.userId, userId),
+          gte(usageDaily.date, fromStr),
+          lt(usageDaily.date, toStr),
+        ),
+      );
+
+    for (const row of historicalRows) {
+      daily.push({
+        date: row.date,
+        run_count: row.runCount,
+        run_time_ms: Number(row.runTimeMs),
+      });
+    }
+
+    // Part 3: today + partial end day from agent_runs [historicalTo, endDate)
+    daily.push(
+      ...(await queryAgentRunsDaily(db, userId, historicalTo, endDate)),
+    );
+  }
+
+  // Sort descending by date and calculate totals
+  daily.sort((a, b) => b.date.localeCompare(a.date));
+
   let totalRuns = 0;
   let totalRunTimeMs = 0;
-
-  const daily: DailyUsage[] = dailyResults.map((row) => {
-    const runCount = Number(row.run_count);
-    const runTimeMs = Number(row.run_time_ms);
-    totalRuns += runCount;
-    totalRunTimeMs += runTimeMs;
-    return {
-      date: String(row.date),
-      run_count: runCount,
-      run_time_ms: runTimeMs,
-    };
-  });
+  for (const d of daily) {
+    totalRuns += d.run_count;
+    totalRunTimeMs += d.run_time_ms;
+  }
 
   const response: UsageResponse = {
     period: {
