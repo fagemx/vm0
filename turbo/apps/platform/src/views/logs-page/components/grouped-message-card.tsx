@@ -340,7 +340,7 @@ function Connector({ isDashed }: { isDashed: boolean }) {
   );
 }
 
-export interface ToolGroup {
+interface ToolGroup {
   toolName: string;
   operations: ToolOperation[];
 }
