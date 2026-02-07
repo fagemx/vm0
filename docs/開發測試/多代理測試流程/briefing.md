@@ -173,7 +173,72 @@ describe("METHOD /api/path/to/route", () => {
 2. **不要直接用 globalThis.services.db** — ESLint 規則會擋
 3. **non-null assertion (!) 要確保型別正確** — helper return type 要明確
 4. **import 路徑數 `../` 的層數要正確** — 從 __tests__ 目錄算起
-5. **不要 mock 內部模組** — 只 mock 外部依賴（@clerk, @e2b, @aws-sdk 等）
+5. **不要 mock 內部模組** — 只 mock 外部依賴（@clerk, @e2b, @aws-sdk 等）。如果覺得「不得不用 internal mock」，參考下方第 9.1 節的解法。
+
+### 9.1 遇到「好像需要 internal mock」的情況怎麼辦
+
+**絕對不要用 `vi.mock("../../../src/lib/xxx")` — 先查以下三種常見障礙的解法。**
+
+#### 障礙 A：模組有 `import "server-only"`
+
+`setup.ts` 已全域 mock：`vi.mock("server-only", () => ({}))`。**不需要額外處理。**
+
+#### 障礙 B：模組從 `process.env.X` 讀取設定（module-level）
+
+用 `vi.hoisted()` 在所有 import 之前設定環境變數：
+
+```typescript
+vi.hoisted(() => {
+  vi.stubEnv("ABLY_API_KEY", "test-key");
+});
+```
+
+#### 障礙 C：模組建立外部套件的 singleton（如 `new Ably.Rest()`）
+
+Mock 外部套件，用 `vi.fn()` factory 回傳 mock instance：
+
+```typescript
+const { mockMethod } = vi.hoisted(() => ({
+  mockMethod: vi.fn(),
+}));
+
+vi.mock("ably", () => ({
+  default: {
+    Rest: vi.fn(() => ({
+      auth: { createTokenRequest: mockMethod },
+      channels: { get: () => ({ publish: vi.fn() }) },
+    })),
+  },
+}));
+```
+
+然後在 `beforeEach` 中 reset：`mockMethod.mockReset()`
+
+#### 完整範例：realtime/token route
+
+`realtime/client.ts` 同時有三個障礙（server-only + env var + ably singleton），正確解法：
+
+```typescript
+// 障礙 B + C：hoisted 確保 env 和 mock ref 在 import 前就緒
+const { mockCreateTokenRequest } = vi.hoisted(() => {
+  vi.stubEnv("ABLY_API_KEY", "test-ably-key");
+  return { mockCreateTokenRequest: vi.fn() };
+});
+
+// 障礙 C：mock 外部套件
+vi.mock("ably", () => ({
+  default: {
+    Rest: vi.fn(() => ({
+      auth: { createTokenRequest: mockCreateTokenRequest },
+      channels: { get: () => ({ publish: vi.fn() }) },
+    })),
+  },
+}));
+
+// 障礙 A：server-only 已在 setup.ts 處理，不需要任何動作
+```
+
+> **教訓來源：** PR #2513 review — 原本用了 `vi.mock("../../../../../src/lib/realtime/client")` 被打回來，改用上方模式後通過。
 
 ---
 
