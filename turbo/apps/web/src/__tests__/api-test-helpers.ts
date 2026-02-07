@@ -14,6 +14,7 @@ import {
 import { cliTokens } from "../db/schema/cli-tokens";
 import { deviceCodes } from "../db/schema/device-codes";
 import { agentRuns } from "../db/schema/agent-run";
+import { composeJobs } from "../db/schema/compose-job";
 import { eq } from "drizzle-orm";
 
 // Route handlers - imported here so callers don't need to pass them
@@ -1201,4 +1202,45 @@ export async function createTestConnectorSession(
     .returning();
 
   return session!;
+}
+
+// ============================================================================
+// Compose Job Test Helpers
+// ============================================================================
+
+/**
+ * Insert a compose job directly into DB for test setup.
+ * Uses direct DB insert because compose jobs are created by internal
+ * server logic (sandbox spawn), not by a user-facing API route.
+ *
+ * @returns The compose job ID
+ */
+export async function createTestComposeJob(options: {
+  status: string;
+  createdAt: Date;
+  userId?: string;
+}): Promise<string> {
+  const [row] = await globalThis.services.db
+    .insert(composeJobs)
+    .values({
+      userId: options.userId ?? "test-user",
+      githubUrl: "https://github.com/test/repo",
+      status: options.status,
+      createdAt: options.createdAt,
+    })
+    .returning({ id: composeJobs.id });
+  return row!.id;
+}
+
+/**
+ * Look up a compose job's status and error for verification.
+ */
+export async function findTestComposeJob(
+  jobId: string,
+): Promise<{ status: string; error: string | null } | undefined> {
+  const [row] = await globalThis.services.db
+    .select({ status: composeJobs.status, error: composeJobs.error })
+    .from(composeJobs)
+    .where(eq(composeJobs.id, jobId));
+  return row;
 }
