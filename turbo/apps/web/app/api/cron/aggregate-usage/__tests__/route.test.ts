@@ -58,6 +58,14 @@ describe("GET /api/cron/aggregate-usage", () => {
     expect(body.error.code).toBe("UNAUTHORIZED");
   });
 
+  it("should return 401 with missing authorization header", async () => {
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.error.code).toBe("UNAUTHORIZED");
+  });
+
   it("should return 200 with no usage for current user", async () => {
     const response = await GET(cronRequest("test-cron-secret"));
     const body = await response.json();
