@@ -6,6 +6,7 @@ import {
   createTestRun,
   completeTestRun,
   createCompletedTestRun,
+  findUsageDaily,
 } from "../../../../src/__tests__/api-test-helpers";
 import {
   testContext,
@@ -329,16 +330,23 @@ describe("GET /api/usage", () => {
 
       const url = `http://localhost:3000/api/usage?start_date=${fiveDaysAgo.toISOString()}&end_date=${now.toISOString()}`;
 
-      // First query: computes and caches
+      // First query: triggers on-demand compute + cache write
       const response1 = await GET(createTestRequest(url));
       const data1 = await response1.json();
 
-      // Second query: reads from cache
-      const response2 = await GET(createTestRequest(url));
-      const data2 = await response2.json();
-
       expect(data1.summary.total_runs).toBe(1);
       expect(data1.summary.total_run_time_ms).toBe(6000);
+
+      // Verify cache was written to usage_daily
+      const fourDaysAgoStr = fourDaysAgo.toISOString().split("T")[0]!;
+      const cached = await findUsageDaily(user.userId, fourDaysAgoStr);
+      expect(cached).toBeDefined();
+      expect(cached!.runCount).toBe(1);
+      expect(cached!.runTimeMs).toBe(6000);
+
+      // Second query returns same result (now from cache)
+      const response2 = await GET(createTestRequest(url));
+      const data2 = await response2.json();
       expect(data2.summary.total_runs).toBe(data1.summary.total_runs);
       expect(data2.summary.total_run_time_ms).toBe(
         data1.summary.total_run_time_ms,
