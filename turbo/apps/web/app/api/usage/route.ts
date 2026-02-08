@@ -84,8 +84,9 @@ async function queryAgentRunsDaily(
  * - end_date: ISO date string (default: now)
  *
  * Returns daily aggregated usage statistics for the authenticated user.
- * Uses a hybrid query: pre-aggregated usage_daily for historical complete days,
- * and real-time agent_runs for boundary days and today.
+ * Uses a dual-path strategy: cached usage_daily for historical complete days
+ * (populated by cron or on-demand), real-time agent_runs for boundary days
+ * and today. Missing cache entries are computed and stored on first access.
  */
 export async function GET(request: NextRequest) {
   initServices();
@@ -196,11 +197,12 @@ export async function GET(request: NextRequest) {
       ...(await queryAgentRunsDaily(db, userId, startDate, historicalFrom)),
     );
 
-    // Part 2: complete historical days from usage_daily
+    // Part 2: complete historical days — dual-path (cache + on-demand compute)
     const fromStr = historicalFrom.toISOString().split("T")[0]!;
     const toStr = historicalTo.toISOString().split("T")[0]!;
 
-    const historicalRows = await db
+    // 2a. Check cache (usage_daily)
+    const cachedRows = await db
       .select({
         date: usageDaily.date,
         runCount: usageDaily.runCount,
@@ -215,12 +217,52 @@ export async function GET(request: NextRequest) {
         ),
       );
 
-    for (const row of historicalRows) {
+    const cachedDates = new Set(cachedRows.map((r) => r.date));
+
+    for (const row of cachedRows) {
       daily.push({
         date: row.date,
         run_count: row.runCount,
         run_time_ms: Number(row.runTimeMs),
       });
+    }
+
+    // 2b. On-demand compute for missing days from agent_runs
+    const totalDays = Math.floor(
+      (historicalTo.getTime() - historicalFrom.getTime()) / MS_PER_DAY,
+    );
+
+    if (cachedDates.size < totalDays) {
+      const computedRows = await queryAgentRunsDaily(
+        db,
+        userId,
+        historicalFrom,
+        historicalTo,
+      );
+
+      for (const row of computedRows) {
+        if (!cachedDates.has(row.date)) {
+          daily.push(row);
+
+          // Cache for next time (fire-and-forget upsert)
+          await db
+            .insert(usageDaily)
+            .values({
+              userId,
+              date: row.date,
+              runCount: row.run_count,
+              runTimeMs: row.run_time_ms,
+            })
+            .onConflictDoUpdate({
+              target: [usageDaily.userId, usageDaily.date],
+              set: {
+                runCount: row.run_count,
+                runTimeMs: row.run_time_ms,
+                updatedAt: new Date(),
+              },
+            });
+        }
+      }
     }
 
     // Part 3: today + partial end day from agent_runs [historicalTo, endDate)

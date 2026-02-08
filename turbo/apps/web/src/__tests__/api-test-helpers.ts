@@ -1369,7 +1369,11 @@ export async function findTestComposeJob(
 
 /**
  * Create a completed agent run with controlled timestamps.
- * Used for testing usage aggregation cron job.
+ *
+ * Direct DB insert is required because createdAt uses PostgreSQL defaultNow()
+ * which cannot be controlled via the API or JavaScript fake timers. Tests for
+ * date-range logic (cron aggregation, usage API boundaries) need runs placed
+ * at specific historical dates.
  */
 export async function createCompletedTestRun(options: {
   composeVersionId: string;
@@ -1391,33 +1395,6 @@ export async function createCompletedTestRun(options: {
     })
     .returning({ id: agentRuns.id });
   return row!.id;
-}
-
-/**
- * Insert a usage_daily record for testing hybrid query in /api/usage.
- * Simulates pre-aggregated historical data without running the cron.
- */
-export async function insertUsageDaily(options: {
-  userId: string;
-  date: string;
-  runCount: number;
-  runTimeMs: number;
-}): Promise<void> {
-  await globalThis.services.db.insert(usageDaily).values({
-    userId: options.userId,
-    date: options.date,
-    runCount: options.runCount,
-    runTimeMs: options.runTimeMs,
-  });
-}
-
-/**
- * Return the test database instance for passing to functions that accept
- * a db parameter (e.g. backfillUsageDaily). Avoids direct globalThis.services.db
- * access in test files, which triggers the no-direct-db-in-tests lint rule.
- */
-export function getTestDb() {
-  return globalThis.services.db;
 }
 
 /**
