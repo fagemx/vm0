@@ -319,12 +319,9 @@ export function testContext(): TestContext {
       // Axiom not mocked, skip
     }
 
-    // Date.now mock - default implementation returns real time
+    // Date.now mock - spy passes through to real implementation by default
     // Tests can override with: context.mocks.dateNow.mockReturnValue(specificTime)
-    const originalDateNow = Date.now.bind(Date);
-    const dateNowMock = vi
-      .spyOn(Date, "now")
-      .mockImplementation(() => originalDateNow());
+    const dateNowMock = vi.spyOn(Date, "now");
 
     // Date constructor mock for controlling new Date()
     const RealDate = globalThis.Date;
@@ -354,7 +351,7 @@ export function testContext(): TestContext {
         );
       },
       useRealTime() {
-        dateNowMock.mockImplementation(() => originalDateNow());
+        dateNowMock.mockRestore();
         vi.unstubAllGlobals();
       },
     };

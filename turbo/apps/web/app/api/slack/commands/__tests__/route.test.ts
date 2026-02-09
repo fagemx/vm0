@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createHmac } from "crypto";
 import { http, HttpResponse } from "msw";
 import { POST } from "../route";
@@ -6,11 +6,6 @@ import { testContext } from "../../../../../src/__tests__/test-helpers";
 import { server } from "../../../../../src/mocks/server";
 
 // Mock only external dependencies (third-party packages)
-vi.mock("@clerk/nextjs/server");
-vi.mock("@e2b/code-interpreter");
-vi.mock("@aws-sdk/client-s3");
-vi.mock("@aws-sdk/s3-request-presigner");
-vi.mock("@axiomhq/js");
 
 // Mock Next.js after() to capture promises instead of deferring
 vi.mock("next/server", async (importOriginal) => {

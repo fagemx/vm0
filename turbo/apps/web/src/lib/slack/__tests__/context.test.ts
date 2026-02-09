@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { HttpResponse } from "msw";
 import {
   formatContextForAgent,
@@ -10,10 +10,6 @@ import { server } from "../../../mocks/server";
 import { http } from "../../../__tests__/msw";
 
 // Mock external dependencies required by testContext().setupMocks()
-vi.mock("@e2b/code-interpreter");
-vi.mock("@aws-sdk/client-s3");
-vi.mock("@aws-sdk/s3-request-presigner");
-vi.mock("@axiomhq/js");
 
 const context = testContext();
 

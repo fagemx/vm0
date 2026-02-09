@@ -54,6 +54,30 @@ vi.mock("@clerk/nextjs/server", () => ({
   createRouteMatcher: vi.fn(),
 }));
 
+// Mock E2B sandbox
+vi.mock("@e2b/code-interpreter", () => ({
+  Sandbox: {
+    create: vi.fn(),
+    connect: vi.fn(),
+  },
+}));
+
+// Mock AWS S3
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: vi.fn().mockImplementation(function () {
+    return { send: vi.fn() };
+  }),
+  ListObjectsV2Command: vi.fn(),
+  GetObjectCommand: vi.fn(),
+  PutObjectCommand: vi.fn(),
+  DeleteObjectsCommand: vi.fn(),
+  HeadObjectCommand: vi.fn(),
+}));
+
+vi.mock("@aws-sdk/s3-request-presigner", () => ({
+  getSignedUrl: vi.fn(),
+}));
+
 // Mock Axiom packages
 // The @axiomhq/logging Logger class needs proper method implementations
 vi.mock("@axiomhq/js", () => ({
