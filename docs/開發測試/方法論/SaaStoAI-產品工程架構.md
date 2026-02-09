@@ -1,6 +1,6 @@
-# SaaStoAI 產品工程架構 v0.2
+# SaaStoAI 產品工程架構 v0.3
 
-> 2026-02-09 v0.2。從 v0.1 升級：加入 OverlayPatch 模型、Router 合約、合併規則、Gateway 護欄、Trace 事件。
+> 2026-02-09 v0.3。從 v0.2 升級：入口改為 Web-first、加入第一個 Skill（Diff/Drift Review）、ChangeCard schema、UI→Signal 對應、文件輸入策略、第一個 Pack。
 > 所有工程段落用「能施工」的語言寫，可直接作為開發規格。
 
 ---
@@ -28,20 +28,26 @@ Raw AI（ChatGPT）：任意輸出 → 高校準 → 而且每次重來
 
 ## 商業模型
 
-### 入口：OpenClaw Gateway
+### 入口：SaaStoAI Web 工作檯
 
-OpenClaw（176k stars）用戶的最大痛點：API key 管理和安全。
+**入口 = 能採集校準訊號的互動層。** Gateway 拿不到校準訊號（只看到 prompt → completion），所以不能當主入口。Web 工作檯讓你控制 UI，使用者的每一個「接受」「拒絕」「改寫」「標記不確定」都直接變成 `CalibrationSignal`。
 
 ```
-現狀（OpenClaw 用戶）：
-  自己申請 API key → 貼進設定 → key 洩漏到 prompt 裡 → 安全問題
+入口（使用者直接互動）：SaaStoAI Web 工作檯
+  - Carrier 列表（我的案件/客戶/專案）
+  - Skill 操作（對 Carrier 裡的文件做審查/比對/摘要）
+  - 可操作的結構化產出（每張卡片可接受/拒絕/改寫/標記）
+  - 訊號採集在 UI 層，自然動作 = 校準
 
-我們的 Gateway：
-  用戶註冊 → 拿 token → 貼進 OpenClaw → 完事
-  API key 在 gateway 端，agent 永遠碰不到
+底座（內部服務）：OpenAI-compatible Gateway
+  - Patch 組裝 + LLM 代理 + validator 檢查
+  - API key 代管（使用者永遠碰不到 key）
+  - Rate limit / spending cap / abuse detection
+
+擴展通路（Phase 4）：第三方代理接入
+  - 需要 Signal Uplink 協議才能形成閉環
+  - 沒有 uplink 的接入只有 completion log，校準會很弱
 ```
-
-Gateway 解決用戶最痛的問題（安全 + 簡化），同時把所有流量引到我們這裡。
 
 ### 收入結構
 
@@ -60,10 +66,10 @@ Gateway 解決用戶最痛的問題（安全 + 簡化），同時把所有流量
 ### 成長路徑
 
 ```
-Phase 1：Gateway（安全 + 簡化） → 吸引 OpenClaw 用戶
-Phase 2：Overlay（越用越準） → 留住用戶，形成黏性
-Phase 3：Pack marketplace（預校準工作流） → 社群 + 變現
-Phase 4：Workspace（carrier + 多 skill） → 從工具變成工作平台
+Phase 1：Web 工作檯（一個 Skill 跑通閉環）→ 第一批可蒸餾資料
+Phase 2：多 Skill + Pack → 同一個 carrier 上多種工作
+Phase 3：Pack marketplace → 變現 + 社群
+Phase 4：Signal Uplink 協議 → IDE / OpenClaw / 其他代理接入
 ```
 
 ---
@@ -339,6 +345,165 @@ Patch 被套用到某次 run，或被 validator 擋下，或被衝突凍結。
 
 ---
 
+## v0 文件輸入策略
+
+**v0 不解決文件解析問題。** PDF/Word 解析會直接把 v0 拖進泥沼（抽字、去噪、分段、對齊、頁眉頁腳、表格、掃描件）。v0 要驗證的是「使用者能不能在差異卡片上操作，讓校準訊號累積並回流」，不是字元級 diff。
+
+### 輸入範圍
+
+| 狀態 | 格式 | 說明 |
+|------|------|------|
+| 支援 | 貼純文字、`.txt`、`.md` | 主路徑 |
+| 可嘗試 | `.docx`、文字型 PDF | best-effort 文字抽取；抽取失敗退回貼文字 |
+| 不承諾 | 掃描 PDF（OCR）、表格精準還原、Word track changes | v1+ |
+
+### 輸入抽象
+
+```typescript
+type DocumentContent =
+  | { kind: "plaintext"; text: string; provenance: "pasted" | "uploaded_extracted" }
+  | { kind: "file_ref"; file_id: string; mime: string; provenance: "uploaded_raw" }; // v1 再用
+```
+
+v0 的 diff skill 只吃 `plaintext`。上傳檔案只是「幫你嘗試變成 plaintext」，不是核心路徑。
+
+---
+
+## v0 第一個 Skill：Diff/Drift Review（版本差異／漂移審查）
+
+### 為什麼選它
+
+1. **天然高頻** — 合約談判、PRD、政策、報告，版本迭代是常態。使用者每天回來不是因為 AI 好玩，是因為「又有新版本」。
+2. **訊號密度最高** — 每張差異卡片都是一個可操作的校準機會（接受/拒絕/改寫/標記）。
+3. **不欄位化業務** — 薄結構（讓 UI 可操作、讓 router 可記錄），內容仍然是自然語言。
+4. **v0 if/else router 最容易落地** — 操作語義明確，不需要 LLM 判斷路由。
+
+### Skill 輸入
+
+```typescript
+interface DiffReviewInput {
+  old_text: string;           // 舊版文字
+  new_text: string;           // 新版文字
+  review_intent?: string;     // 使用者一句話，例如「重點看賠償、保密、管轄」
+}
+```
+
+### Skill 輸出：ChangeCard（薄結構化）
+
+LLM 產出「條款級/段落級」差異報告，不是字元級 diff。每張卡片是 UI 上可操作的最小單位。
+
+```typescript
+interface ChangeCard {
+  change_id: string;          // 穩定 id，trace 用
+  summary: string;            // 自然語言：什麼變了
+  old_quote: string;          // 舊版摘錄（讓人一眼知道差在哪）
+  new_quote: string;          // 新版摘錄
+  impact: string;             // 自然語言：這個變更對你造成什麼後果
+  suggested_action: string;   // 自然語言：建議怎麼做
+  uncertainty: boolean;       // 模型不確定時自己標記
+}
+```
+
+**設計決策：**
+- `old_quote` / `new_quote` 不是為了精準定位，是為了讓人「一眼知道差在哪」並能圈選/標記。
+- `uncertainty` 讓 UI 直接掛上「暫定」狀態，防止 Distill poisoning。
+- 不需要 `needs_user_decision` — 如果不確定就標 `uncertainty: true`，建議寫在 `suggested_action`。
+
+### LLM Diff 策略
+
+不做字元級 diff。把兩份文字丟給 LLM，要求產出差異報告。核心提示重點：
+
+- 不要列所有變更；列「對結果/風險/責任可能有影響」的變更
+- 每張卡片一定要帶 old/new quote（短摘錄即可）
+- 不確定就 `uncertainty: true`，並在 `suggested_action` 裡提出要問使用者的問題
+
+這把「對齊問題」從文本演算法轉成生成報告品質 — 而報告品質正好是 schema + validator + overlay 可以控的。
+
+### UI 操作 → CalibrationSignal 對應表
+
+使用者在卡片上的自然動作直接映射成訊號。使用者不需要知道 destination 是什麼。
+
+| UI 動作 | 使用者感覺 | signal.kind | operator | v0 router 產物 |
+|---------|-----------|-------------|----------|---------------|
+| 接受卡片 | 「這條 OK」 | `accept` | `null` | **不產生 patch**，只記 trace（正向樣本） |
+| 拒絕卡片 | 「這條不對/太空」 | `reject` | `repel` | `prompt:add`（repel payload） |
+| 改寫 summary/impact | 「要這樣說才對」 | `modify` | `attract` | `prompt:add`（attract payload） |
+| 標記不確定 | 「先別定案」 | `flag` | `uncertainty` | `prompt:add soft`（永遠不進 validator） |
+| 設為必檢類型 | 「以後每次都要抓」 | `comment` | `boundary` | `validator:constrain hard` |
+| 加一條規則 | 「以後多看 X」 | `comment` | 依文字判斷 | v0 if/else：格式→schema；必檢→validator；其他→prompt |
+
+**「接受卡片」的 operator 是 `null`，不是 `attract`。** 接受不改 = routing policy 第 6 條定義的正向訊號，不產生 patch。如果掛 attract，Distill 會以為要產生 attract patch，和第 6 條矛盾。
+
+---
+
+## v0 第一個 Pack：合約版本差異審查
+
+Pack 不是 prompt 模板，是「別人幫你跑完前 10 次」的結果。
+
+```json
+{
+  "pack_id": "contract-diff-review-tw",
+  "name": "合約版本差異審查 - 台灣商業合約",
+  "version": "0.1.0",
+  "author": "SaaStoAI",
+  "requires": {
+    "destinations": ["prompt", "schema", "validator"]
+  },
+  "patches": [
+    {
+      "operator": "attract",
+      "destination": "schema",
+      "op": "add",
+      "strength": "soft",
+      "payload": "每張卡片必須包含：change_id、summary、old_quote、new_quote、impact、suggested_action"
+    },
+    {
+      "operator": "boundary",
+      "destination": "validator",
+      "op": "constrain",
+      "strength": "hard",
+      "payload": "每張卡片都必須有 old_quote 和 new_quote，缺一不可"
+    },
+    {
+      "operator": "boundary",
+      "destination": "validator",
+      "op": "constrain",
+      "strength": "hard",
+      "payload": "至少產出 3 張卡片；若全文確實只有 1-2 處差異則允許更少，但必須在 summary 說明"
+    },
+    {
+      "operator": "boundary",
+      "destination": "validator",
+      "op": "constrain",
+      "strength": "soft",
+      "payload": "若文本中出現賠償、保密、終止、管轄、智財等關鍵詞的段落有變更，必須有對應卡片"
+    },
+    {
+      "operator": "repel",
+      "destination": "prompt",
+      "op": "add",
+      "strength": "soft",
+      "payload": "不要空泛說'此處有修改'，每張卡片的 impact 必須說明對使用者造成什麼具體後果"
+    },
+    {
+      "operator": "attract",
+      "destination": "prompt",
+      "op": "add",
+      "strength": "soft",
+      "payload": "不確定的卡片標記 uncertainty: true，並在 suggested_action 裡提出要問使用者的具體問題"
+    }
+  ]
+}
+```
+
+### v0 Validator 規則（從 Pack 的 hard patches 衍生）
+
+1. 每張卡片必須有 `old_quote` 和 `new_quote`（缺一 → fail）
+2. 至少 3 張卡片（除非全文差異確實少於 3 處）
+3. 關鍵詞覆蓋檢查：賠償/保密/終止/管轄/智財的段落有變更但無對應卡片 → warning（v0 soft）
+
+---
+
 ## 核心閉環
 
 ```
@@ -587,7 +752,10 @@ IPF 的範圍就是本文件定義的：
 
 | 決策 | 選擇 | 放棄的 | 為什麼 |
 |------|------|--------|--------|
-| 入口選 OpenClaw gateway | 現成 176k 用戶 | 自建用戶群 | 驗證速度 > 品牌建設 |
+| 入口選 Web 工作檯，不選 Gateway | 能採集校準訊號 | OpenClaw 176k 用戶 | 沒有訊號，閉環跑不起來 |
+| 第一個 Skill 選 Diff/Drift Review | 天然高頻 + 訊號密度高 | 從零審合約（一次性） | 版本迭代讓使用者每天回來 |
+| v0 不做文件解析 | 避免掉進 PDF/Word 泥沼 | 上傳即用的體驗 | 先驗證閉環，再投入解析工程 |
+| LLM 粗粒度 diff，不做字元 diff | 快速跑通 | 精確對齊 | 對齊問題轉成生成品質問題，用 overlay 控 |
 | 不做 sandbox | 延遲 2-3s | 程式碼執行能力 | 80% 工作流不需要跑程式 |
 | v0 只做 prompt + schema + validator 三條路由 | 快速上線 | RAG/fewshot/ui_gate/tool_config | 三條路就能驗證核心機制 |
 | Pack 用 JSON + thin header | 簡單、可追蹤版本 | 完整 package manager | 先跑起來，有 10 個 pack 再加 |
@@ -601,41 +769,42 @@ IPF 的範圍就是本文件定義的：
 ## 執行順序
 
 ```
-Week 1-2：Gateway MVP
-  - OpenAI-compatible proxy endpoint
+Week 1-2：Gateway 底座 + Web 骨架
+  - OpenAI-compatible proxy endpoint（內部服務，不對外當入口）
   - 用戶註冊 + token
-  - API key 代管（用戶不碰 key）
+  - API key 代管（用戶永遠碰不到 key）
   - Rate limit + spending cap + abuse detection
   - Request idempotency
-  - 基本用量追蹤
+  - Web 骨架：Carrier 列表頁 + 單一 Carrier 頁面
 
-Week 3-4：OverlayPatch + Router
+Week 3-4：Diff/Drift Review Skill + ChangeCard UI
+  - Skill 輸入：舊版/新版純文字
+  - LLM diff：產出 ChangeCard 陣列（JSON schema 約束）
+  - Web UI：卡片式差異報告，每張卡片可接受/拒絕/改寫/標記
   - overlay_patches 表（完整 patch 結構）
-  - User 層 patch（scope_kind = "user"）
-  - 手動新增/刪除 patch
-  - route() 函數（if/else，6 條規則）
-  - prompt destination：注入 system message
   - trace_events 表（3 種事件）
 
-Week 5-6：Carrier + 三層 + 合併
-  - carriers 表
-  - Project 層 + Skill 層 patch
-  - 合併規則實作（4 層優先 + hard/soft）
-  - schema destination：設定 response format
-  - validator destination：輸出完整性檢查
+Week 5-6：Router + 三層合併
+  - route() 函數（if/else，6 條規則）
+  - UI 操作 → CalibrationSignal → route() → 新 patch
+  - prompt / schema / validator 三條 destination 實作
+  - 合併規則實作（4 層優先 + hard/soft + 衝突處理）
+  - User / Project / Skill 三層 scope
 
-Week 7-8：校準閉環
-  - 使用者動作解讀（接受/拒絕 → CalibrationSignal）
-  - route() 產生新 patch → 存入 DB
+Week 7-8：校準閉環驗證
+  - 同一個 Carrier 多次 diff review → patch 累積
+  - 驗證 KPI：第 N 次的校準成本是否低於第 1 次
   - Deviation check（embedding 比較）
   - 「接受不改」作為正向訊號記錄
+  - best-effort 檔案上傳（.docx / 文字型 PDF → plaintext）
 
-Week 9-10：Pack
-  - Pack JSON 格式（thin header + patches）
+Week 9-10：第一個 Pack
+  - 合約版本差異審查 Pack（schema + validator + prompt patches）
   - pack_installs 表
   - Pack 載入 → 合併到 patch 組裝流程
-  - 第一個 pack（合約審查 or 競品分析）
+  - Pack 安裝/卸載/版本追蹤
 
-之後：Workspace UI、Distill 自動化、RAG destination、fewshot destination、
-      ui_gate destination、marketplace、團隊功能、evidence chain
+之後：第二個 Skill（條款風險審查）、Distill 自動化、RAG destination、
+      fewshot destination、ui_gate destination、Pack marketplace、
+      Signal Uplink 協議、IDE/OpenClaw 接入、團隊功能、evidence chain
 ```
