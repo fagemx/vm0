@@ -371,14 +371,27 @@ v0 的 diff skill 只吃 `plaintext`。上傳檔案只是「幫你嘗試變成 p
 
 ## Skill 定義
 
-**SaaStoAI 的 Skill ≠ Claude Code 的 Skill。**
+### SaaStoAI Skill 是 Claude Skill 的超集
 
-Claude Code Skill 是給 AI agent 的指令模板（`.claude/skills/*.md`），告訴 agent 怎麼做某件事。
+Claude Code Skill 是給 AI agent 的指令模板（`.claude/skills/*.md`），本質上是一段塞進 system prompt 的 markdown。
 
-SaaStoAI Skill 是產品的工作流合約，定義三樣東西：
-1. **輸入型態**（通常是 plaintext + intent）
-2. **輸出卡片 schema**（Card Contract — 讓 UI 可操作、讓 router 可記錄）
-3. **Validator 規則**（缺什麼就 fail / warning）
+SaaStoAI Skill = **Claude Skill（prompt 層）+ Card Schema + Validator + 校準配置**。
+
+```
+Claude Skill（markdown 指令）
+    ↓ 等同於 destination: "prompt" 的 patches
+SaaStoAI Skill 在上面加：
+    ├── 輸入型態（plaintext + intent）
+    ├── 輸出卡片 schema（Card Contract — 讓 UI 可操作、讓 router 可記錄）
+    ├── Validator 規則（缺什麼就 fail / warning）
+    └── 校準配置（UI 操作 → CalibrationSignal 映射）
+```
+
+**這代表 SaaStoAI 可以直接吃 Claude Skill 生態：**
+- 任何 Claude Skill markdown 可以被 import 成一組 `destination: "prompt"` 的 patches
+- SaaStoAI 在上面包一層結構化輸出 + validator + 校準閉環
+- 社群做的 Claude Skill → 直接變成 SaaStoAI Pack 的 prompt base
+- 反過來，SaaStoAI Skill 的 prompt patches 可以 export 成 Claude Skill markdown 給不用工作檯的人
 
 新增一個 Skill 不需要改系統層。共用件（可操作 UI、CalibrationSignal、route()、OverlayPatch、合併規則、Trace 三事件）全部復用。差別只在卡片長什麼樣和哪些欄位必檢。
 
