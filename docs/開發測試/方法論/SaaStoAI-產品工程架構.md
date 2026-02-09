@@ -1,6 +1,6 @@
-# SaaStoAI 產品工程架構 v0.3
+# SaaStoAI 產品工程架構 v0.4
 
-> 2026-02-09 v0.3。從 v0.2 升級：入口改為 Web-first、加入第一個 Skill（Diff/Drift Review）、ChangeCard schema、UI→Signal 對應、文件輸入策略、第一個 Pack。
+> 2026-02-09 v0.4。從 v0.3 升級：三段式產品邏輯（預校準 → 一鍵 → 審查校準）、工作檯重新定位為經驗萃取器（不是編輯器）、入口從「工作檯」改為「一鍵按鈕 + 審查工作檯」。
 > 所有工程段落用「能施工」的語言寫，可直接作為開發規格。
 
 ---
@@ -10,6 +10,52 @@
 **讓 AI 在你的工作脈絡裡越用越對、越用越省。**
 
 不是幫你做完一件事，是讓你每天的工作越來越順。
+
+---
+
+## 產品邏輯：為什麼是三段式
+
+**人類討厭迭代。一鍵完成是最低要求。**
+
+實際觀察（創辦人日常幫設計師開發 agent）：設計師不想迭代圖像生成描述超過 5 次。不是不會用，是大量人類不想 AI native。中間需要有人預先處理好，讓終端使用者一按即用。
+
+但一鍵生成的結果不會百分之百完美。使用者會被老闆罵。所以需要一個地方讓使用者確認「這個能交」，同時讓專業人士能干預生成條件。
+
+```
+階段 1（背後）：預校準
+  誰：領域專家 / Pack 製作者
+  做什麼：建 Pack（預校準好的 OverlayPatch 集合），把品質調到「第 10 次」的水準
+  使用者感知：不知道這段存在
+
+階段 2（使用者）：一鍵執行
+  誰：終端使用者（設計師、小編、業務等）
+  做什麼：按按鈕，拿結果
+  使用者感知：「好快」
+
+階段 3（使用者）：審查校準
+  誰：使用者（確認能交）/ 專業人士（干預生成條件）
+  做什麼：在工作檯上審查結果 — 接受/拒絕/修改/標記
+  使用者感知：「我確認過了，可以交」
+  系統收到：CalibrationSignal → OverlayPatch → 下次更準
+```
+
+### 工作檯是經驗萃取器，不是內容編輯器
+
+工作檯不是取代 Word/Excel。沒有人會放棄自己熟悉的工具。
+
+工作檯存在的理由：
+1. **讓使用者有信心交出去**（審查 ≠ 編輯）
+2. **讓專業人士干預生成條件** — 改的不是成果內容（那回 Word 改就好），改的是「為什麼這樣生不對、應該注意什麼」
+3. **把專業人士腦中的經驗轉成 AI 能懂的 skill** — 這是校準的核心價值
+
+使用者不覺得自己在「訓練 AI」，他覺得自己在「檢查成果」。每一個接受/拒絕/標記的動作，就是校準訊號。**自然動作 = 校準。**
+
+### 兩類工作檯使用者
+
+| 使用者類型 | 在工作檯上做什麼 | 系統得到什麼 |
+|---|---|---|
+| 一般使用者 | 審查結果、確認能交 | 正向/負向訊號（accept/reject） |
+| 專業人士 | 干預生成條件、設定校準規則 | 深度校準（modify/boundary），可轉成 skill |
 
 ---
 
@@ -28,16 +74,19 @@ Raw AI（ChatGPT）：任意輸出 → 高校準 → 而且每次重來
 
 ## 商業模型
 
-### 入口：SaaStoAI Web 工作檯
-
-**入口 = 能採集校準訊號的互動層。** Gateway 拿不到校準訊號（只看到 prompt → completion），所以不能當主入口。Web 工作檯讓你控制 UI，使用者的每一個「接受」「拒絕」「改寫」「標記不確定」都直接變成 `CalibrationSignal`。
+### 三段式入口
 
 ```
-入口（使用者直接互動）：SaaStoAI Web 工作檯
+階段 2 入口（使用者直接互動）：一鍵按鈕
+  - Pack 列表（可用的一鍵工作流）
+  - 輸入素材 → 按一鍵 → 拿結果
+  - 不需要學 prompt、不需要迭代
+
+階段 3 入口（結果審查 + 校準採集）：審查工作檯
   - Carrier 列表（我的案件/客戶/專案）
-  - Skill 操作（對 Carrier 裡的文件做審查/比對/摘要）
-  - 可操作的結構化產出（每張卡片可接受/拒絕/改寫/標記）
+  - 結果卡片可接受/拒絕/改寫/標記
   - 訊號採集在 UI 層，自然動作 = 校準
+  - 專業人士可進入校準規則編輯
 
 底座（內部服務）：OpenAI-compatible Gateway
   - Patch 組裝 + LLM 代理 + validator 檢查
@@ -66,9 +115,9 @@ Raw AI（ChatGPT）：任意輸出 → 高校準 → 而且每次重來
 ### 成長路徑
 
 ```
-Phase 1：Web 工作檯（一個 Skill 跑通閉環）→ 第一批可蒸餾資料
+Phase 1：三段式跑通（一個 Skill + 一鍵按鈕 + 審查工作檯）→ 第一批校準資料
 Phase 2：多 Skill + Pack → 同一個 carrier 上多種工作
-Phase 3：Pack marketplace → 變現 + 社群
+Phase 3：Pack marketplace → 專業人士的經驗變現 + 社群
 Phase 4：Signal Uplink 協議 → IDE / OpenClaw / 其他代理接入
 ```
 
@@ -776,7 +825,7 @@ IPF 的範圍就是本文件定義的：
 
 | 決策 | 選擇 | 放棄的 | 為什麼 |
 |------|------|--------|--------|
-| 入口選 Web 工作檯，不選 Gateway | 能採集校準訊號 | OpenClaw 176k 用戶 | 沒有訊號，閉環跑不起來 |
+| 入口選三段式（一鍵按鈕 + 審查工作檯），不選 Gateway-first | 能採集校準訊號（自然動作 = 校準） | OpenClaw 176k 用戶的即時導流 | 沒有 UI 訊號，閉環跑不起來；Gateway 只做內部底座 |
 | 第一個 Skill 選 Diff/Drift Review | 天然高頻 + 訊號密度高 | 從零審合約（一次性） | 版本迭代讓使用者每天回來 |
 | v0 不做文件解析 | 避免掉進 PDF/Word 泥沼 | 上傳即用的體驗 | 先驗證閉環，再投入解析工程 |
 | LLM 粗粒度 diff，不做字元 diff | 快速跑通 | 精確對齊 | 對齊問題轉成生成品質問題，用 overlay 控 |
@@ -793,40 +842,49 @@ IPF 的範圍就是本文件定義的：
 ## 執行順序
 
 ```
-Week 1-2：Gateway 底座 + Web 骨架
-  - OpenAI-compatible proxy endpoint（內部服務，不對外當入口）
-  - 用戶註冊 + token
-  - API key 代管（用戶永遠碰不到 key）
-  - Rate limit + spending cap + abuse detection
-  - Request idempotency
-  - Web 骨架：Carrier 列表頁 + 單一 Carrier 頁面
+Week 1-2：三段式骨架 + Gateway 底座
+  目標：一個 Pack 的一鍵按鈕 → 結果 → 審查卡片，端到端可走通（假資料可）
+  - 一鍵按鈕入口頁面（Pack 列表 + 「執行」按鈕）
+  - 結果展示頁面（ChangeCard 陣列的靜態渲染）
+  - 審查工作檯骨架（卡片可接受/拒絕/標記，訊號先存 local state）
+  - Gateway 底座：OpenAI-compatible proxy endpoint（內部服務）
+  - 用戶註冊 + token + API key 代管
+  - Rate limit + spending cap + abuse detection + request idempotency
 
-Week 3-4：Diff/Drift Review Skill + ChangeCard UI
+Week 3-4：Diff/Drift Review Skill + 訊號落地
+  目標：真實 LLM 生成 ChangeCard，審查動作寫入 DB
   - Skill 輸入：舊版/新版純文字
   - LLM diff：產出 ChangeCard 陣列（JSON schema 約束）
-  - Web UI：卡片式差異報告，每張卡片可接受/拒絕/改寫/標記
+  - 審查工作檯接上真實資料（替換假資料）
   - overlay_patches 表（完整 patch 結構）
   - trace_events 表（3 種事件）
+  - UI 操作 → CalibrationSignal → 存入 trace_events
 
-Week 5-6：Router + 三層合併
+Week 5-6：Router + 三層合併 → 閉環
+  目標：審查動作產生的訊號能影響下一次生成
   - route() 函數（if/else，6 條規則）
-  - UI 操作 → CalibrationSignal → route() → 新 patch
+  - CalibrationSignal → route() → 新 patch → 存回 DB
   - prompt / schema / validator 三條 destination 實作
   - 合併規則實作（4 層優先 + hard/soft + 衝突處理）
   - User / Project / Skill 三層 scope
+  - 驗證：同一 Carrier 第 2 次 diff 比第 1 次準
 
-Week 7-8：校準閉環驗證
+Week 7-8：閉環品質驗證 + 體驗打磨
+  目標：量化證明「越用越準」
   - 同一個 Carrier 多次 diff review → patch 累積
-  - 驗證 KPI：第 N 次的校準成本是否低於第 1 次
+  - 驗證 KPI：第 N 次的校準成本低於第 1 次
   - Deviation check（embedding 比較）
   - 「接受不改」作為正向訊號記錄
   - best-effort 檔案上傳（.docx / 文字型 PDF → plaintext）
+  - 一鍵按鈕 → 結果 → 審查 的端到端體驗打磨
 
-Week 9-10：第一個 Pack
+Week 9-10：第一個 Pack + 專業人士路徑
+  目標：Pack 作為「預校準」能跳過冷啟動
   - 合約版本差異審查 Pack（schema + validator + prompt patches）
   - pack_installs 表
   - Pack 載入 → 合併到 patch 組裝流程
   - Pack 安裝/卸載/版本追蹤
+  - 專業人士的校準規則編輯介面（工作檯上的進階模式）
 
 之後：第二個 Skill（條款風險審查）、Distill 自動化、RAG destination、
       fewshot destination、ui_gate destination、Pack marketplace、
