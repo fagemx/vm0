@@ -369,6 +369,33 @@ v0 的 diff skill 只吃 `plaintext`。上傳檔案只是「幫你嘗試變成 p
 
 ---
 
+## Skill 定義
+
+**SaaStoAI 的 Skill ≠ Claude Code 的 Skill。**
+
+Claude Code Skill 是給 AI agent 的指令模板（`.claude/skills/*.md`），告訴 agent 怎麼做某件事。
+
+SaaStoAI Skill 是產品的工作流合約，定義三樣東西：
+1. **輸入型態**（通常是 plaintext + intent）
+2. **輸出卡片 schema**（Card Contract — 讓 UI 可操作、讓 router 可記錄）
+3. **Validator 規則**（缺什麼就 fail / warning）
+
+新增一個 Skill 不需要改系統層。共用件（可操作 UI、CalibrationSignal、route()、OverlayPatch、合併規則、Trace 三事件）全部復用。差別只在卡片長什麼樣和哪些欄位必檢。
+
+### Skill 擴充路徑
+
+Diff/Drift Review 是**跨職業通用的元技能**，不是合約專屬。任何版本迭代的工作物（合約/文案/腳本/brief/提示詞/規格）都能用。合約只是第一個 Pack，因為它付費意願高且 validator 可硬化。
+
+```
+v0：Diff/Drift Review（跑通閉環）
+v1：Draft Builder（骨架 → 可編輯段落卡片）、QA/Checklist Review（完整性檢查卡片）
+v2：Variant Generator（多版本候選，選擇/微調 → 高密度訊號）
+```
+
+每個 Skill 都用同一套「可操作卡片 → signal → patch」的骨架，只換卡片 schema 和 validator 規則。不同職業（律師/設計師/行銷/youtuber）的差別在 Pack 校準的內容，不在系統架構。
+
+---
+
 ## v0 第一個 Skill：Diff/Drift Review（版本差異／漂移審查）
 
 ### 為什麼選它
@@ -377,6 +404,7 @@ v0 的 diff skill 只吃 `plaintext`。上傳檔案只是「幫你嘗試變成 p
 2. **訊號密度最高** — 每張差異卡片都是一個可操作的校準機會（接受/拒絕/改寫/標記）。
 3. **不欄位化業務** — 薄結構（讓 UI 可操作、讓 router 可記錄），內容仍然是自然語言。
 4. **v0 if/else router 最容易落地** — 操作語義明確，不需要 LLM 判斷路由。
+5. **跨職業通用** — 合約版本比對、文案迭代、腳本改版、規格變更，同一套 ChangeCard 全部適用。
 
 ### Skill 輸入
 
