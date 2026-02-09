@@ -80,15 +80,16 @@ Phase 4：Signal Uplink 協議 → IDE / OpenClaw / 其他代理接入
 
 **Overlay 不是文字，是 Patch（補丁）。**
 
-v0.1 的 overlay 只有 `{ operator, text }`，所有校準只能塞進 prompt。但「每個風險附法條」這句話同時需要影響 schema（加必填欄位）和 validator（檢查有沒有引用）。只有一個 `text` 欄位做不到。
+最初的設計只有 `{ operator, text }`，所有校準只能塞進 prompt。但「每個風險附法條」這句話同時需要影響 schema（加必填欄位）和 validator（檢查有沒有引用）。只有一個 `text` 欄位做不到。
 
-v0.2 的 overlay 是 OverlayPatch — 帶有「去哪裡」和「怎麼作用」的結構化補丁。內容仍然是自然語言（不欄位化業務），但控制面標準化。
+現在的 overlay 是 OverlayPatch — 帶有「去哪裡」和「怎麼作用」的結構化補丁。內容仍然是自然語言（不欄位化業務），但控制面標準化。
 
 ### OverlayPatch 結構
 
 ```typescript
 interface OverlayPatch {
   id: string;                    // uuid
+  operator: string | null;       // "attract" | "repel" | "boundary" | "uncertainty" | null
   destination: Destination;      // 要影響系統的哪個面向
   op: PatchOp;                   // 怎麼影響
   strength: "soft" | "hard";     // soft 可被高層覆蓋，hard 不可
@@ -173,7 +174,7 @@ Router 是一個函數，接收校準訊號，回傳路由決策：
 ```typescript
 interface CalibrationSignal {
   kind: string;        // "accept" | "reject" | "modify" | "comment" | "flag"
-  operator: string;    // "attract" | "repel" | "boundary" | "uncertainty"
+  operator: string | null; // "attract" | "repel" | "boundary" | "uncertainty" | null（accept 時為 null）
   payload: string;     // 使用者的原始輸入 / 動作描述
   scope_kind: string;  // "user" | "project" | "skill"
   scope_id: string | null;
@@ -243,8 +244,9 @@ v0 只有這 4 層。未來加 Team 層插在 Pack 和 User 之間。
 
 ```
 1. 從 DB 撈出目標 carrier 的所有 active patch
-2. 按 scope 分組：skill_base → pack → user → session
-3. 同組內按 destination 分桶
+2. 按 source 分優先級：skill_base → pack → user(manual/accepted/rejected/distilled) → session
+   （注意：一個 scope_kind="skill" 但 source="manual" 的 patch 在 user 層，不在 skill_base 層）
+3. 同層內按 destination 分桶
 4. 每個桶內按合併規則疊加
 5. 衝突的標記出來，不套用
 6. 最終產出每個 destination 的 assembled patches
@@ -255,9 +257,9 @@ v0 只有這 4 層。未來加 Team 層插在 Pack 和 User 之間。
 ## Gateway 核心流程
 
 ```
-使用者（OpenClaw / Web / API）
+Web 工作檯
     ↓ user token
-Gateway
+Gateway（內部服務）
     ├── 1. 認證：驗 token，查用戶，檢查 rate limit / spending cap
     ├── 2. 組裝 overlay：
     │     從 DB 撈三層 patch → 按合併規則疊加
@@ -573,45 +575,26 @@ Pack = 預校準好的 OverlayPatch 集合 + 薄 header。使用者買了 pack �
 
 ### v0 Pack 結構
 
-仍然是單一 JSON 檔，不是軟體包。但加了身份識別和版本追蹤：
+仍然是單一 JSON 檔，不是軟體包。但加了身份識別和版本追蹤。
+
+v0 第一個 Pack 的完整範例見「v0 第一個 Pack：合約版本差異審查」段落。Pack JSON 的通用結構：
 
 ```json
 {
-  "pack_id": "contract-review-tw-commercial",
-  "name": "合約審查 - 台灣商業合約",
-  "version": "1.2.0",
-  "author": "資深律師 XXX",
+  "pack_id": "unique-stable-id",
+  "name": "Pack 顯示名稱",
+  "version": "semver",
+  "author": "作者",
   "requires": {
-    "destinations": ["prompt", "schema", "validator"]
+    "destinations": ["pack 需要的 destination 列表"]
   },
   "patches": [
     {
-      "operator": "attract",
-      "destination": "schema",
-      "op": "add",
-      "strength": "soft",
-      "payload": "輸出必須包含：條款編號、風險等級（高/中/低）、法條引用"
-    },
-    {
-      "operator": "boundary",
-      "destination": "validator",
-      "op": "constrain",
-      "strength": "hard",
-      "payload": "每條都要審，漏看的標記為'未審查'"
-    },
-    {
-      "operator": "repel",
-      "destination": "prompt",
-      "op": "add",
-      "strength": "soft",
-      "payload": "不要籠統說'整體風險中等'，每個風險要具體"
-    },
-    {
-      "operator": "attract",
-      "destination": "prompt",
-      "op": "add",
-      "strength": "soft",
-      "payload": "每個風險附上法條或判例引用"
+      "operator": "attract | repel | boundary | uncertainty",
+      "destination": "prompt | schema | validator | ...",
+      "op": "add | remove | replace | constrain",
+      "strength": "soft | hard",
+      "payload": "自然語言內容"
     }
   ]
 }
@@ -699,10 +682,10 @@ pack_installs (
 )
 ```
 
-### 與 v0.1 的差異
+### 設計演進
 
-| v0.1 | v0.2 | 為什麼改 |
-|------|------|---------|
+| 早期設計 | 現在 | 為什麼改 |
+|---------|------|---------|
 | `overlays` 表有 `text` + `operator` | `overlay_patches` 表有完整 patch 結構 | overlay 是 patch 不是 text |
 | `traces` 表記錄 user_action | `trace_events` 表記錄 3 種結構化事件 | Distill 需要知道路由決策和套用結果 |
 | 沒有 pack_installs | 新增 pack_installs | 追蹤安裝版本 |
@@ -714,7 +697,7 @@ pack_installs (
 ### v0
 
 ```
-前端：Next.js（gateway 設定頁 + carrier 列表 + 對話介面）
+前端：Next.js（Carrier 列表 + ChangeCard 工作檯 + 校準管理）
 後端：Next.js API routes
 DB：PostgreSQL（carriers + overlay_patches + trace_events + pack_installs）
 LLM：直接打 Anthropic / OpenAI API
@@ -723,9 +706,9 @@ LLM：直接打 Anthropic / OpenAI API
 
 不需要：sandbox、Rust、Firecracker、MCP、evidence chain、向量資料庫（v0 不做 RAG）。
 
-### Gateway 對接 OpenClaw
+### 擴展通路：第三方代理接入（Phase 4）
 
-OpenClaw 支援自訂 provider。用戶只需改一行設定：
+Gateway 是 OpenAI-compatible 的，未來可開放給第三方代理（OpenClaw、IDE plugin 等）。但需要 **Signal Uplink** 協議才能形成校準閉環 — 沒有 uplink 的接入只有 completion log，overlay 不會成長。
 
 ```json
 {
@@ -739,7 +722,7 @@ OpenClaw 支援自訂 provider。用戶只需改一行設定：
 }
 ```
 
-Gateway 收到請求 → 組裝 patches → 注入 prompt/schema → 轉發到實際 LLM API → validator 檢查 → 回傳。OpenClaw 不用改任何程式碼，完全透明。
+v0 不開放外部接入。Gateway 只服務自家 Web 工作檯。
 
 ---
 
