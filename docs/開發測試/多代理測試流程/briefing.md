@@ -98,28 +98,113 @@ describe("METHOD /api/path/to/route", () => {
 
 ## 5. 已有的 Test Helper 函數
 
-在 `api-test-helpers.ts` 中已有：
+在 `api-test-helpers.ts` 中已有（按功能分組）：
+
+### Request / Config
 
 | 函數 | 用途 |
 |------|------|
 | `createTestRequest(url, options?)` | 建立 NextRequest |
+| `createDefaultComposeConfig(agentName)` | 建立預設 compose config |
+
+### Auth / Token
+
+| 函數 | 用途 |
+|------|------|
 | `createTestSandboxToken(userId, runId)` | 產生 sandbox JWT |
-| `createTestDeviceCode(options)` | 插入 device code |
-| `findTestDeviceCode(code)` | 查詢 device code |
-| `findTestCliToken(token)` | 查詢 CLI token |
+| `createTestComposeJobToken(userId, ...)` | 產生 compose job JWT |
 | `createTestCliToken(userId, expiresAt?)` | 建立 CLI token |
 | `deleteTestCliToken(token)` | 刪除 CLI token |
+| `findTestCliToken(token)` | 查詢 CLI token |
+| `findTestCliTokensByUser(userId, name?)` | 查詢使用者的所有 CLI token |
+| `createTestDeviceCode(options?)` | 插入 device code |
+| `findTestDeviceCode(code)` | 查詢 device code |
+
+### Scope / Compose / Permission
+
+| 函數 | 用途 |
+|------|------|
 | `createTestScope(slug)` | 透過 API 建立 scope |
 | `createTestCompose(agentName, options?)` | 透過 API 建立 compose |
+| `createTestPermission(composeId, granteeType, granteeEmail?)` | 建立 permission |
+
+### Model Provider
+
+| 函數 | 用途 |
+|------|------|
 | `createTestModelProvider(type, secretValue, selectedModel?)` | 建立 model provider |
+| `createTestMultiAuthModelProvider(...)` | 建立 multi-auth model provider |
 | `deleteTestModelProvider(type)` | 刪除 model provider |
 | `listTestModelProviders()` | 列出 model providers |
+
+### Run / Session
+
+| 函數 | 用途 |
+|------|------|
 | `createTestRun(composeId, prompt, options?)` | 建立 run |
+| `createTestV1Run(...)` | 透過 v1 API 建立 run |
+| `getTestRun(runId)` | 查詢 run |
 | `completeTestRun(userId, runId)` | 完成 run |
+| `createCompletedTestRun(options)` | 一步建立已完成的 run |
+| `insertStalePendingRun(...)` | 插入過期的 pending run |
+| `createTestAgentSession(...)` | 建立 agent session |
+
+### Schedule
+
+| 函數 | 用途 |
+|------|------|
+| `createTestSchedule(...)` | 建立 schedule |
+| `getTestSchedule(...)` | 查詢 schedule |
+| `listTestSchedules()` | 列出 schedules |
+| `enableTestSchedule(...)` | 啟用 schedule |
+| `disableTestSchedule(...)` | 停用 schedule |
+| `deleteTestSchedule(...)` | 刪除 schedule |
+| `getTestScheduleRuns(...)` | 查詢 schedule 的 runs |
+
+### Storage / Artifact / Volume
+
+| 函數 | 用途 |
+|------|------|
 | `createTestArtifact(name, options?)` | 建立 artifact |
 | `createTestVolume(name, options?)` | 建立 volume |
+| `insertStorageVersion(...)` | 插入 storage version |
+| `findTestArtifactStorage(scopeId)` | 查詢 artifact storage |
+
+### Secret / Variable
+
+| 函數 | 用途 |
+|------|------|
+| `createTestSecret(...)` | 建立 secret |
 | `listTestSecrets()` | 列出 secrets |
-| `createTestPermission(composeId, granteeType, granteeEmail?)` | 建立 permission |
+| `createTestVariable(...)` | 建立 variable |
+
+### Connector
+
+| 函數 | 用途 |
+|------|------|
+| `createTestConnector(...)` | 建立 connector |
+| `createTestConnectorSession(...)` | 建立 connector session |
+
+### Compose Job
+
+| 函數 | 用途 |
+|------|------|
+| `createTestComposeJob(options)` | 建立 compose job |
+| `findTestComposeJob(...)` | 查詢 compose job |
+| `findTestComposeJobsByUser(userId)` | 查詢使用者的 compose jobs |
+
+### Slack
+
+| 函數 | 用途 |
+|------|------|
+| `createTestSlackComposeRequest(options)` | 建立 Slack compose request |
+| `findTestSlackComposeRequest(composeJobId)` | 查詢 Slack compose request |
+
+### Usage
+
+| 函數 | 用途 |
+|------|------|
+| `findUsageDaily(...)` | 查詢 usage_daily 記錄 |
 
 **重要**：不要在測試檔中直接用 `globalThis.services.db`，ESLint 會報錯。所有 DB 操作必須透過 helper。
 
