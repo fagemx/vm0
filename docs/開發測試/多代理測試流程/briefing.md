@@ -19,24 +19,25 @@ turbo/apps/web/app/api/cli/auth/device/__tests__/route.test.ts
 
 ---
 
-## 2. 必要的 Mock
+## 2. 全域 Mock（setup.ts 已處理）
 
-所有 web route 測試都需要以下 mock：
+以下外部套件的 factory mock 已在 `src/__tests__/setup.ts` 集中設定，**不需要在個別測試檔中重複宣告**：
 
-```typescript
-vi.mock("@clerk/nextjs/server");
-vi.mock("@e2b/code-interpreter");
-vi.mock("@aws-sdk/client-s3");
-vi.mock("@aws-sdk/s3-request-presigner");
-vi.mock("@axiomhq/js");
-```
+- `@clerk/nextjs/server` — Clerk 認證
+- `@e2b/code-interpreter` — E2B sandbox（`Sandbox.create`, `Sandbox.connect`）
+- `@aws-sdk/client-s3` — S3 client（`S3Client` 含 `send` 方法, 各種 Command）
+- `@aws-sdk/s3-request-presigner` — `getSignedUrl`
+- `@axiomhq/js` / `@axiomhq/logging` — Axiom logging
+- `server-only` — Next.js server-only guard
+
+如果你的測試需要**自訂** mock 行為（例如 Ably），才需要在測試檔中額外寫 `vi.mock("ably", () => ({...}))`。
 
 ---
 
 ## 3. 測試骨架
 
 ```typescript
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { POST } from "../route";  // 或 GET, PUT, DELETE
 import {
   createTestRequest,
@@ -47,11 +48,7 @@ import {
   type UserContext,
 } from "../../../../../../src/__tests__/test-helpers";
 
-vi.mock("@clerk/nextjs/server");
-vi.mock("@e2b/code-interpreter");
-vi.mock("@aws-sdk/client-s3");
-vi.mock("@aws-sdk/s3-request-presigner");
-vi.mock("@axiomhq/js");
+// 不需要 vi.mock() — 所有外部依賴已在 setup.ts 集中 mock
 
 const context = testContext();
 
@@ -169,12 +166,14 @@ describe("METHOD /api/path/to/route", () => {
 
 ## 9. 已知陷阱（必讀）
 
-1. **vi.mock 清單要完整** — 缺少任何一個都可能導致奇怪錯誤
+1. **不需要寫 `vi.mock()` 清單** — 常用外部依賴已在 `setup.ts` 集中 mock。只有需要自訂行為的套件（如 Ably）才在測試檔中額外 mock。
 2. **不要直接用 globalThis.services.db** — ESLint 規則會擋
 3. **non-null assertion (!) 要確保型別正確** — helper return type 要明確
 4. **import 路徑數 `../` 的層數要正確** — 從 __tests__ 目錄算起
 5. **不要 mock 內部模組** — 只 mock 外部依賴（@clerk, @e2b, @aws-sdk 等）。如果覺得「不得不用 internal mock」，參考下方第 9.1 節的解法。
 6. **唯一名稱用 `uniqueId()`，不要用 `Date.now()`** — `uniqueId("prefix")` 產生 `prefix-a1b2c3d4` 格式。注意：codebase 中既有測試混用兩者（`beforeEach` fixture 用 `uniqueId`，inline 名稱用 `Date.now`），但 reviewer (e7h4n) 要求新代碼統一用 `uniqueId()`。
+7. **vi.fn() 做 constructor 不能用 arrow function** — vitest v4 要求 `function` 或 `class` 語法：`vi.fn(function () { return {...}; })` 或 `vi.fn().mockImplementation(function () { return {...}; })`。Arrow function `() => ({...})` 配 `new` 會拋 TypeError。
+8. **只在需要時 import `vi`** — 如果測試檔不直接使用 `vi`（沒有 `vi.mock`, `vi.fn`, `vi.stubEnv` 等），就不要 import 它，否則 lint 會報 unused。
 
 ### 9.1 遇到「好像需要 internal mock」的情況怎麼辦
 
@@ -205,10 +204,12 @@ const { mockMethod } = vi.hoisted(() => ({
 
 vi.mock("ably", () => ({
   default: {
-    Rest: vi.fn(() => ({
-      auth: { createTokenRequest: mockMethod },
-      channels: { get: () => ({ publish: vi.fn() }) },
-    })),
+    Rest: vi.fn(function () {
+      return {
+        auth: { createTokenRequest: mockMethod },
+        channels: { get: () => ({ publish: vi.fn() }) },
+      };
+    }),
   },
 }));
 ```
@@ -229,10 +230,12 @@ const { mockCreateTokenRequest } = vi.hoisted(() => {
 // 障礙 C：mock 外部套件
 vi.mock("ably", () => ({
   default: {
-    Rest: vi.fn(() => ({
-      auth: { createTokenRequest: mockCreateTokenRequest },
-      channels: { get: () => ({ publish: vi.fn() }) },
-    })),
+    Rest: vi.fn(function () {
+      return {
+        auth: { createTokenRequest: mockCreateTokenRequest },
+        channels: { get: () => ({ publish: vi.fn() }) },
+      };
+    }),
   },
 }));
 
