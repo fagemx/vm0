@@ -4,24 +4,60 @@
 >
 > **Decision: Incremental (Approach 2)** — e7h4n's choice: "I think incremental would be better"
 
-## Current Architecture (post #2746)
+## Current Architecture (verified on main, post #2746 + #2773 merge)
+
+### File: `log-detail-signals.ts`
+
+```typescript
+// Pure async computed — re-evaluates when currentLogId$ changes
+export const runDetail$ = computed(async (get) => {
+  const logId = get(currentLogId$);
+  if (!logId) return null;
+  // fetch /api/platform/logs/${logId}
+});
+
+// Pure async computed — while-loop fetches ALL pages
+export const runEvents$ = computed(async (get, { signal }) => {
+  const logId = get(currentLogId$);
+  if (!logId) return [] as AgentEvent[];
+  // while (hasMore) { fetch page, append, update since }
+});
+
+// Artifact download (unchanged by our work)
+export const downloadArtifact$ = command(...);
+```
+
+### File: `log-detail-state.ts`
+
+```typescript
+export const currentLogId$ = computed((get) => {
+  const params = get(pathParams$);
+  return params?.id ?? null;
+});
+```
+
+### File: `log-detail-page.ts`
+
+```typescript
+export const setupLogDetailPage$ = command(({ set }) => {
+  set(updatePage$, createElement(LogDetailPage));
+  set(setLogDetailSearchTerm$, "");
+});
+```
+
+### React usage
 
 ```
-getOrCreateLogDetail$(logId)  → Computed<Promise<LogDetail>>
-getOrCreateAgentEvents$(runId) → Computed<Promise<AgentEventsResponse>>
-  ↓
-initAccumulatedEvents$  → sets internalAgentEventsAccumulated$ (state)
-loadMoreAgentEvents$    → appends to accumulated state via `since` param
-  ↓
-React: useLoadable(detail$), agentEventsAccumulated$ for display
+agent-events-card.tsx:32  → useLoadable(runEvents$)
+log-detail-content.tsx:49 → useLoadable(runDetail$)
 ```
 
-Key facts:
-- API endpoint: `/api/agent/runs/${runId}/telemetry/agent?limit=30&order=asc&since=${ms}`
-- `since` param filters events after given timestamp (ms)
+### Key facts
+- API: `/api/agent/runs/${runId}/telemetry/agent?limit=30&order=asc&since=${ms}`
+- `since` filter is **exclusive** (`_time > datetime(...)`, verified `route.ts:76`)
 - Response: `{ events: AgentEvent[], hasMore: boolean, framework: string }`
-- Events ordered by `sequenceNumber ASC` (deterministic)
-- `AgentEvent` has: `sequenceNumber`, `eventType`, `eventData`, `createdAt`
+- Events ordered by `sequenceNumber ASC`
+- `useLastLoadable` available in ccstate-react v5 but not currently used
 
 ---
 
@@ -29,66 +65,64 @@ Key facts:
 
 ### Core Idea
 
-Each "page" of events is a stable `Computed` created via factory, closing over its fetch parameters. Once created, a page computed never re-fetches — its result is permanently cached by ccstate. Polling creates new page computeds for only the new events.
+Each "page" of events is a stable `Computed` created via factory, closing over its fetch parameters. Once created, a page computed never re-fetches — ccstate caches its resolved value forever. Polling creates new page computeds for only the new events.
 
-### Signal Graph
+### Signal Graph (target)
 
 ```
-currentLogId$ (from log-detail-state.ts)
+currentLogId$ (from log-detail-state.ts, unchanged)
     ↓
-pagedEvents$ : State<Computed<Promise<AgentEvent[]>>[]>
+runDetail$ (async computed + detailReloadTick$ dependency)  ← re-fetches on tick
+    ↓
+pagedEvents$ : State<Computed<Promise<PageResult>>[]>       ← grows on poll
     ↓ (flattened)
-allEvents$   : Computed<Promise<AgentEvent[]>>   ← React reads this
+allEvents$   : Computed<Promise<AgentEvent[]>>              ← React reads this
     ↓
-logDetail$   : per-logId computed (already exists via getOrCreateLogDetail$)
-
 setupPolling$ : command — interval that checks for new events, appends page computeds
 ```
 
 ### Type Signatures
 
 ```typescript
+interface PageResult {
+  events: AgentEvent[];
+  hasMore: boolean;
+}
+
 // Factory: creates one immutable computed per page fetch
 function createEventPageComputed(
   runId: string,
-  since?: string,     // ISO timestamp of last known event
-  limit?: number,
-): Computed<Promise<{ events: AgentEvent[]; hasMore: boolean }>>
+  since?: string,
+): Computed<Promise<PageResult>>
 
 // Mutable state: list of page computeds for current logId
-const pagedEvents$ = state<Computed<Promise<{ events: AgentEvent[]; hasMore: boolean }>>[]>([]);
+const pagedEvents$ = state<Computed<Promise<PageResult>>[]>([]);
 
 // Derived: flatten all pages into single event array
-const allEvents$ = computed(async (get) => {
+export const allEvents$ = computed(async (get) => {
   const pages = get(pagedEvents$);
   const results = await Promise.all(pages.map(p => get(p)));
   return results.flatMap(r => r.events);
 });
-
-// Derived: are there more events to poll?
-const hasMoreEvents$ = computed(async (get) => {
-  const pages = get(pagedEvents$);
-  if (pages.length === 0) return false;
-  const lastPage = await get(pages[pages.length - 1]);
-  return lastPage.hasMore;
-});
 ```
 
-### Implementation Steps
+---
 
-#### Step 1: Event Page Factory
+## Implementation Steps
+
+### Step 1: Event Page Factory
 
 ```typescript
-const EVENTS_PAGE_LIMIT = 30;
+const AGENT_EVENTS_PAGE_LIMIT = 30; // already exists
 
 function createEventPageComputed(
   runId: string,
   since?: string,
-): Computed<Promise<{ events: AgentEvent[]; hasMore: boolean }>> {
+): Computed<Promise<PageResult>> {
   return computed(async (get) => {
     const fetchFn = get(fetch$);
     const params = new URLSearchParams({
-      limit: String(EVENTS_PAGE_LIMIT),
+      limit: String(AGENT_EVENTS_PAGE_LIMIT),
       order: "asc",
     });
     if (since) {
@@ -98,7 +132,7 @@ function createEventPageComputed(
       `/api/agent/runs/${runId}/telemetry/agent?${params.toString()}`,
     );
     if (!response.ok) {
-      throw new Error(`Failed to fetch events: ${response.statusText}`);
+      throw new Error(`Failed to fetch agent events: ${response.statusText}`);
     }
     const data = (await response.json()) as AgentEventsResponse;
     return { events: data.events, hasMore: data.hasMore };
@@ -106,61 +140,77 @@ function createEventPageComputed(
 }
 ```
 
-Once created, this computed is **immutable** — ccstate caches its resolved value forever (no dependencies change). This is the key insight: old pages are never re-fetched.
+Once created, this computed is **immutable** — ccstate caches its resolved value forever (only depends on `fetch$` which is stable). Old pages are never re-fetched.
 
-#### Step 2: Initial Load (command)
+### Step 2: Replace `runEvents$` with paged approach
+
+Delete the existing `runEvents$` (while-loop). Replace with:
 
 ```typescript
-const initEventPages$ = command(({ get, set }, runId: string) => {
-  // Create first page (no `since` param)
-  const firstPage = createEventPageComputed(runId);
-  set(pagedEvents$, [firstPage]);
+const pagedEvents$ = state<Computed<Promise<PageResult>>[]>([]);
+
+export const allEvents$ = computed(async (get) => {
+  const pages = get(pagedEvents$);
+  if (pages.length === 0) return [] as AgentEvent[];
+  const results = await Promise.all(pages.map(p => get(p)));
+  return results.flatMap(r => r.events);
 });
 ```
 
-Unlike the current `allEvents$` pure computed (while-loop), initial load is now a command that creates the first page computed. This is a deliberate trade-off: we lose automatic re-evaluation on logId change, but gain incremental polling capability.
+### Step 3: Add `detailReloadTick$` to `runDetail$`
 
-**Note:** The first page returns up to 30 events. If `hasMore` is true, we need to load remaining pages eagerly before polling starts. This is done in the setup command (Step 4).
+```typescript
+const detailReloadTick$ = state(0);
 
-#### Step 3: Poll Tick — Append New Pages
+export const runDetail$ = computed(async (get) => {
+  get(detailReloadTick$);  // re-fetch when ticked
+  const logId = get(currentLogId$);
+  if (!logId) return null;
+  const fetchFn = get(fetch$);
+  const response = await fetchFn(`/api/platform/logs/${logId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch log detail: ${response.statusText}`);
+  }
+  return (await response.json()) as LogDetail;
+});
+```
+
+### Step 4: Poll command
 
 ```typescript
 const pollNewEvents$ = command(async ({ get, set }, runId: string) => {
   const pages = get(pagedEvents$);
   if (pages.length === 0) return;
 
-  // Resolve the last page to get its last event's timestamp
   const lastPage = await get(pages[pages.length - 1]);
   if (lastPage.events.length === 0) return;
 
   const lastEvent = lastPage.events[lastPage.events.length - 1];
-  const since = lastEvent.createdAt;
-
-  // Create a new page computed for events after `since`
-  const newPage = createEventPageComputed(runId, since);
+  const newPage = createEventPageComputed(runId, lastEvent.createdAt);
   const newPageResult = await get(newPage);
 
-  // Only append if there are actually new events
   if (newPageResult.events.length > 0) {
     set(pagedEvents$, (prev) => [...prev, newPage]);
   }
 });
 ```
 
-Each poll tick: 1 API call. Old pages untouched.
-
-#### Step 4: Setup Polling (command with AbortSignal)
+### Step 5: Setup polling with lifecycle
 
 ```typescript
 const POLL_INTERVAL = 3000;
 const MAX_INTERVAL = 30000;
 
-const setupPolling$ = command(async ({ get, set }, signal: AbortSignal) => {
+const TERMINAL_STATUSES = ["completed", "failed", "timeout", "cancelled"];
+
+export const setupEventPolling$ = command(async ({ get, set }, signal: AbortSignal) => {
   const logId = get(currentLogId$);
   if (!logId) return;
 
   // Phase 1: Eager initial load — fetch all existing pages
-  set(initEventPages$, logId);
+  const firstPage = createEventPageComputed(logId);
+  set(pagedEvents$, [firstPage]);
+
   let keepLoading = true;
   while (keepLoading && !signal.aborted) {
     const pages = get(pagedEvents$);
@@ -174,142 +224,108 @@ const setupPolling$ = command(async ({ get, set }, signal: AbortSignal) => {
     }
   }
 
-  // Phase 2: Check if already terminal — skip polling if so
-  const detail$ = set(getOrCreateLogDetail$, logId);
-  const detail = await get(detail$);
-  if (detail && isTerminalStatus(detail.status)) return;
+  // Phase 2: Check if already terminal — skip polling
+  const detail = await get(runDetail$);
+  if (detail && TERMINAL_STATUSES.includes(detail.status)) return;
 
   // Phase 3: Polling loop
   let polling = false;
   let errorCount = 0;
-  let interval = POLL_INTERVAL;
 
-  const timer = setInterval(async () => {
+  const scheduleNext = () => {
+    if (signal.aborted) return;
+    const interval = Math.min(POLL_INTERVAL * 2 ** errorCount, MAX_INTERVAL);
+    const timerId = setTimeout(tick, interval);
+    signal.addEventListener("abort", () => clearTimeout(timerId), { once: true });
+  };
+
+  const tick = async () => {
     if (polling || signal.aborted) return;
     polling = true;
     try {
-      // Re-fetch log detail to check status (detail is NOT cached per-page,
-      // so we need a reload mechanism for it — see Step 5)
-      const currentDetail = await refetchLogDetail(get, set, logId);
-      if (currentDetail && isTerminalStatus(currentDetail.status)) {
-        clearInterval(timer);
-        return;
+      // Re-fetch detail to check terminal status
+      set(detailReloadTick$, (x) => x + 1);
+      const currentDetail = await get(runDetail$);
+      if (currentDetail && TERMINAL_STATUSES.includes(currentDetail.status)) {
+        return; // stop polling
       }
 
-      // Fetch new events
       await set(pollNewEvents$, logId);
       errorCount = 0;
-      interval = POLL_INTERVAL;
     } catch {
       errorCount++;
-      interval = Math.min(POLL_INTERVAL * 2 ** errorCount, MAX_INTERVAL);
-      clearInterval(timer);
-      // Reschedule with backoff (simplified — real impl uses dynamic timer)
     } finally {
       polling = false;
+      scheduleNext();
     }
-  }, interval);
+  };
 
-  signal.addEventListener("abort", () => clearInterval(timer));
+  scheduleNext();
 });
-
-function isTerminalStatus(status: string): boolean {
-  return ["completed", "failed", "timeout", "cancelled"].includes(status);
-}
 ```
 
-#### Step 5: Log Detail Re-fetch
+Note: using `setTimeout` chain instead of `setInterval` — this naturally handles backoff by computing interval before each tick.
 
-Log detail (status, timing, etc.) changes during a run. Unlike events (append-only), detail must be **re-fetched** each tick to detect terminal status.
-
-Two options:
-- **Option A:** Use a `reloadTick$` signal on `logDetail$` only (not events). Lightweight — 1 extra API call per tick for just the detail endpoint.
-- **Option B:** Create a new `logDetail$` computed each tick and replace in cache. But this defeats caching.
-
-**Recommendation: Option A** — add `reloadTick$` to the detail computed only. Events stay incremental.
+### Step 6: Update `setupLogDetailPage$`
 
 ```typescript
-const detailReloadTick$ = state(0);
+export const setupLogDetailPage$ = command(({ get, set }, signal: AbortSignal) => {
+  set(updatePage$, createElement(LogDetailPage));
+  set(setLogDetailSearchTerm$, "");
 
-// Modified detail factory
-function createLogDetailComputed(logId: string): Computed<Promise<LogDetail>> {
-  return computed(async (get) => {
-    get(detailReloadTick$);  // re-fetch when ticked
-    const fetchFn = get(fetch$);
-    const response = await fetchFn(`/api/platform/logs/${logId}`);
-    if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
-    return (await response.json()) as LogDetail;
-  });
-}
-```
-
-React uses `useLastLoadable(logDetail$)` to avoid flicker on detail re-fetch.
-
-#### Step 6: LogId Change Cleanup
-
-When user navigates to a different log, we must reset `pagedEvents$`:
-
-```typescript
-const setupLogDetailPage$ = command(({ get, set }, signal: AbortSignal) => {
-  const logId = get(currentLogId$);
-
-  // Reset page state for new logId
+  // Reset polling state
   set(pagedEvents$, []);
   set(detailReloadTick$, 0);
 
-  if (!logId) return;
-
-  // Start polling (includes initial load)
-  set(setupPolling$, signal);
+  // Start polling (includes eager initial load)
+  set(setupEventPolling$, signal);
 });
 ```
 
-This is a **command**, not a pure computed. The cleanup is explicit, not automatic. This is the trade-off we accept for incremental efficiency.
+### Step 7: Update React components
 
----
+**`agent-events-card.tsx`**:
+```diff
+- import { runEvents$ } from "../../../../signals/logs-page/log-detail-signals.ts";
++ import { allEvents$ } from "../../../../signals/logs-page/log-detail-signals.ts";
 
-## React Integration
-
-```typescript
-// In LogDetailPage component
-const allEventsLoadable = useLastLoadable(allEvents$);
-const logDetailLoadable = useLastLoadable(logDetail$);
-
-// useLastLoadable keeps showing previous data while new data loads
-// No loading flicker between polls
+- const eventsLoadable = useLoadable(runEvents$);
++ const eventsLoadable = useLastLoadable(allEvents$);
 ```
 
-Key: `useLastLoadable` (not `useLoadable`) for both detail and events. This prevents the UI from flickering to a loading state on each poll tick.
+**`log-detail-content.tsx`**:
+```diff
+- const loadable = useLoadable(runDetail$);
++ const loadable = useLastLoadable(runDetail$);
+```
+
+Both need `useLastLoadable` from `ccstate-react` import to prevent loading flicker between polls.
 
 ---
 
-## Risk Points & Mitigations (adapted for incremental)
+## Deletion Checklist
 
-### 1. Overlapping polls
+| What | Where | Why |
+|------|-------|-----|
+| `runEvents$` (while-loop computed) | `log-detail-signals.ts:36-82` | Replaced by `allEvents$` + `pagedEvents$` |
 
-Same risk as before. The `polling` flag (single-flight lock) prevents concurrent poll ticks.
+That's it. `runDetail$` is modified (not deleted). Everything else is additions.
 
-### 2. Dedup / ordering
+---
 
-**Verified: not an issue.** API uses `_time > datetime(...)` (exclusive, `route.ts:76`). Combined with `sequenceNumber ASC` ordering, there is no overlap between pages. Axiom timestamps have nanosecond precision, so same-timestamp collision is negligible. No client-side dedup needed.
+## Test Cases
 
-### 3. Stop condition
+| Test | What to verify |
+|------|---------------|
+| Initial load fetches all pages | Given API returns hasMore=true for first page, verify allEvents$ contains events from all pages |
+| Poll tick appends new events | After initial load, simulate new events arriving, verify allEvents$ grows |
+| Empty poll is no-op | Poll when no new events → pagedEvents$ length unchanged |
+| Terminal status stops polling | Set detail status to "completed" → verify no more API calls |
+| LogId change resets state | Switch logId → pagedEvents$ resets to [], new pages loaded |
+| Error backoff | Simulate API error → verify next poll interval doubles |
+| Signal abort cleanup | Abort signal → polling stops, no timers leak |
 
-Handled by re-fetching `logDetail$` each tick (via `detailReloadTick$`) and checking terminal status before polling new events.
-
-### 4. Error backoff
-
-Same exponential backoff pattern. Consecutive errors increase interval (3s -> 6s -> 12s -> max 30s). Success resets to 3s.
-
-### 5. Empty poll optimization
-
-Most poll ticks return 0 new events (agent is thinking, not emitting). The `pollNewEvents$` command handles this by checking `newPageResult.events.length > 0` before appending. No empty page computeds accumulate.
-
-### 6. Memory — page computed accumulation
-
-Each poll that finds new events creates a new `Computed`. For very long runs (1000+ events, 30+ pages), this means 30+ computeds in memory.
-
-**Assessment:** Acceptable. Each resolved computed holds a small array (30 events). The ccstate garbage collector handles unreferenced computeds. When `pagedEvents$` is reset on logId change, old computeds become unreferenced.
+Testing approach: Mock `fetch$` signal to control API responses. Use ccstate store directly (not React) for signal-level tests.
 
 ---
 
@@ -317,14 +333,13 @@ Each poll that finds new events creates a new `Computed`. For very long runs (10
 
 | File | Change |
 |------|--------|
-| `logs-signals.ts` | Add `pagedEvents$`, `allEvents$`, `createEventPageComputed()`, `pollNewEvents$`, `setupPolling$`, `detailReloadTick$` |
-| `logs-signals.ts` | Modify `createLogDetailComputed()` to depend on `detailReloadTick$` |
-| `logs-signals.ts` | Add `setupLogDetailPage$` command for cleanup on logId change |
-| `log-detail-page.ts` | Call `setupLogDetailPage$` instead of manual fetch setup |
-| React components | Switch from `useLoadable` to `useLastLoadable` for detail + events |
-| `types.ts` | No changes needed (AgentEvent, AgentEventsResponse already defined) |
+| `log-detail-signals.ts` | Delete `runEvents$`. Add `detailReloadTick$`, `pagedEvents$`, `allEvents$`, `createEventPageComputed()`, `pollNewEvents$`, `setupEventPolling$`. Modify `runDetail$` to depend on `detailReloadTick$`. |
+| `log-detail-page.ts` | Add `signal` param, reset states, call `setupEventPolling$` |
+| `agent-events-card.tsx` | `useLoadable(runEvents$)` → `useLastLoadable(allEvents$)` |
+| `log-detail-content.tsx` | `useLoadable(runDetail$)` → `useLastLoadable(runDetail$)` |
+| `types.ts` | No changes needed |
 
-**Estimated scope:** ~150 lines of signal logic + ~20 lines of React wiring
+**Estimated scope:** ~120 lines of signal logic + ~10 lines of React changes
 
 ---
 
@@ -333,24 +348,25 @@ Each poll that finds new events creates a new `Computed`. For very long runs (10
 ```
 User opens log detail page
     │
-    ├─ setupLogDetailPage$ fires
-    │   ├─ reset pagedEvents$ = []
-    │   ├─ setupPolling$ starts
+    ├─ setupLogDetailPage$ fires (with AbortSignal from route)
+    │   ├─ render LogDetailPage
+    │   ├─ reset pagedEvents$ = [], detailReloadTick$ = 0
+    │   ├─ setupEventPolling$ starts
     │   │   ├─ Phase 1: Eager load
     │   │   │   ├─ createEventPageComputed(logId)         → page 0 (events 1-30)
-    │   │   │   ├─ hasMore? → createEventPageComputed(logId, since=event30.createdAt) → page 1 (events 31-60)
+    │   │   │   ├─ hasMore? → createEventPageComputed(logId, since=last.createdAt) → page 1
     │   │   │   └─ hasMore=false → done
     │   │   │
     │   │   ├─ Phase 2: Check terminal → not terminal, start polling
     │   │   │
-    │   │   └─ Phase 3: Every 3s
-    │   │       ├─ Re-fetch logDetail$ (detailReloadTick$++)
-    │   │       ├─ Terminal? → stop
+    │   │   └─ Phase 3: setTimeout chain (3s default, backoff on error)
+    │   │       ├─ detailReloadTick$++ → runDetail$ re-fetches
+    │   │       ├─ Terminal? → stop (no more setTimeout)
     │   │       └─ pollNewEvents$ → 1 API call
-    │   │           ├─ 0 new events → no-op
-    │   │           └─ N new events → append 1 new page computed
+    │   │           ├─ 0 new events → no-op, schedule next
+    │   │           └─ N new events → append 1 page computed, schedule next
     │   │
-    │   └─ signal.abort → clearInterval
+    │   └─ signal.abort (route change) → clearTimeout, stop
     │
     └─ React: useLastLoadable(allEvents$) renders events, no flicker
 ```
@@ -359,9 +375,9 @@ User opens log detail page
 
 ## Resolved Questions
 
-1. **`since` filter is exclusive (`>`)** — Verified in `route.ts:76`: `` `| where _time > datetime("${new Date(since).toISOString()}")` ``. No client-side dedup needed. Edge case: Axiom `_time` has nanosecond precision, so same-timestamp collision is negligible.
-2. **Initial load: eager** — Consistent with current `allEvents$` behavior (while-loop loads all). In polling context user won't manually "load more", so eager is correct.
-3. **Detail re-fetch: `detailReloadTick$`** — Minimal change to existing factory+cache pattern. Only affects `logDetail$`, not events. Acceptable trade-off.
+1. **`since` filter is exclusive (`>`)** — Verified in `route.ts:76`: `` `| where _time > datetime(...)` ``. No client-side dedup needed.
+2. **Initial load: eager** — Consistent with current `runEvents$` behavior (while-loop loads all).
+3. **Detail re-fetch: `detailReloadTick$`** — Minimal change to existing `runDetail$`. Only adds one `get(detailReloadTick$)` line.
 
 ---
 
@@ -371,7 +387,8 @@ User opens log detail page
 |------|----------|------|
 | 2026-02-09 | Start with Approach 1 (reload signal) | Our recommendation |
 | 2026-02-09 | Use Approach 2 (incremental) | e7h4n's decision |
+| 2026-02-11 | Verified architecture against main (post #2746, #2773) | Codebase audit |
 
 ---
 
-*Sources: PR #2716, #2746, #2773, Issue #2730, e7h4n comment on polling approaches, ccstate docs (computed with arguments, useLastLoadable), logs-signals.ts current implementation*
+*Sources: PR #2716, #2746, #2773, Issue #2730, e7h4n comment on polling approaches, ccstate-react v5 (useLastLoadable), log-detail-signals.ts on main*
