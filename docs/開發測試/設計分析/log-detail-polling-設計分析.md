@@ -1,202 +1,391 @@
-# Log Detail Polling Design Analysis
+# Log Detail Polling — Incremental Implementation Plan
 
 > Context: PR #2716 (auto-refresh log detail), Issue #2730 / PR #2746 (signal rewrite), e7h4n comment on polling approaches
+>
+> **Decision: Incremental (Approach 2)** — e7h4n's choice: "I think incremental would be better"
 
 ## Current Architecture (post #2746)
 
 ```
-currentLogId$ (state)
-    ↓
-logDetail$ (async computed) → /api/platform/logs/:id
-allEvents$ (async computed) → while loop fetches all event pages
-    ↓
-React: useLoadable(logDetail$), useLoadable(allEvents$)
+getOrCreateLogDetail$(logId)  → Computed<Promise<LogDetail>>
+getOrCreateAgentEvents$(runId) → Computed<Promise<AgentEventsResponse>>
+  ↓
+initAccumulatedEvents$  → sets internalAgentEventsAccumulated$ (state)
+loadMoreAgentEvents$    → appends to accumulated state via `since` param
+  ↓
+React: useLoadable(detail$), agentEventsAccumulated$ for display
 ```
 
-Pure computed, no mutable state. `allEvents$` re-evaluates automatically when `currentLogId$` changes.
+Key facts:
+- API endpoint: `/api/agent/runs/${runId}/telemetry/agent?limit=30&order=asc&since=${ms}`
+- `since` param filters events after given timestamp (ms)
+- Response: `{ events: AgentEvent[], hasMore: boolean, framework: string }`
+- Events ordered by `sequenceNumber ASC` (deterministic)
+- `AgentEvent` has: `sequenceNumber`, `eventType`, `eventData`, `createdAt`
 
 ---
 
-## Three Approaches
+## Design: Incremental Polling with Computed-per-Page
 
-### Approach 1: Reload Signal (full re-fetch)
+### Core Idea
+
+Each "page" of events is a stable `Computed` created via factory, closing over its fetch parameters. Once created, a page computed never re-fetches — its result is permanently cached by ccstate. Polling creates new page computeds for only the new events.
+
+### Signal Graph
+
+```
+currentLogId$ (from log-detail-state.ts)
+    ↓
+pagedEvents$ : State<Computed<Promise<AgentEvent[]>>[]>
+    ↓ (flattened)
+allEvents$   : Computed<Promise<AgentEvent[]>>   ← React reads this
+    ↓
+logDetail$   : per-logId computed (already exists via getOrCreateLogDetail$)
+
+setupPolling$ : command — interval that checks for new events, appends page computeds
+```
+
+### Type Signatures
 
 ```typescript
-const reloadTick$ = state(0);
+// Factory: creates one immutable computed per page fetch
+function createEventPageComputed(
+  runId: string,
+  since?: string,     // ISO timestamp of last known event
+  limit?: number,
+): Computed<Promise<{ events: AgentEvent[]; hasMore: boolean }>>
 
-const logDetail$ = computed(async (get) => {
-  get(reloadTick$);
-  const logId = get(currentLogId$);
-  if (!logId) return null;
-  // ... fetch detail
+// Mutable state: list of page computeds for current logId
+const pagedEvents$ = state<Computed<Promise<{ events: AgentEvent[]; hasMore: boolean }>>[]>([]);
+
+// Derived: flatten all pages into single event array
+const allEvents$ = computed(async (get) => {
+  const pages = get(pagedEvents$);
+  const results = await Promise.all(pages.map(p => get(p)));
+  return results.flatMap(r => r.events);
 });
 
-const allEvents$ = computed(async (get, { signal }) => {
-  get(reloadTick$);
-  const logId = get(currentLogId$);
-  if (!logId) return [];
-  // ... while loop fetch all pages
-});
-
-const setupPolling$ = command(({ get, set }, signal: AbortSignal) => {
-  const timer = setInterval(() => {
-    set(reloadTick$, (x) => x + 1);
-  }, 3000);
-  signal.addEventListener("abort", () => clearInterval(timer));
+// Derived: are there more events to poll?
+const hasMoreEvents$ = computed(async (get) => {
+  const pages = get(pagedEvents$);
+  if (pages.length === 0) return false;
+  const lastPage = await get(pages[pages.length - 1]);
+  return lastPage.hasMore;
 });
 ```
 
-React uses `useLastLoadable` instead of `useLoadable` to avoid loading flicker between polls.
+### Implementation Steps
 
-| Pros | Cons |
-|------|------|
-| Minimal — one state + one command | Re-fetches ALL events every tick |
-| Pure computed, no mutable accumulated state | N pages = N API calls per tick |
-| `useLastLoadable` retains old data, no flicker | Wasteful for long runs (1000+ events) |
-| logId change auto-cleans, no leak | — |
-| No dedup needed | — |
+#### Step 1: Event Page Factory
 
-### Approach 2: Computed with Arguments (incremental)
+```typescript
+const EVENTS_PAGE_LIMIT = 30;
 
-Each page is a stable computed created via factory. Polling adds new page computeds.
+function createEventPageComputed(
+  runId: string,
+  since?: string,
+): Computed<Promise<{ events: AgentEvent[]; hasMore: boolean }>> {
+  return computed(async (get) => {
+    const fetchFn = get(fetch$);
+    const params = new URLSearchParams({
+      limit: String(EVENTS_PAGE_LIMIT),
+      order: "asc",
+    });
+    if (since) {
+      params.set("since", String(new Date(since).getTime()));
+    }
+    const response = await fetchFn(
+      `/api/agent/runs/${runId}/telemetry/agent?${params.toString()}`,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to fetch events: ${response.statusText}`);
+    }
+    const data = (await response.json()) as AgentEventsResponse;
+    return { events: data.events, hasMore: data.hasMore };
+  });
+}
+```
 
-Type signature: `pagedEvents$: State<Computed<Promise<AgentEvent[]>>[]>`
+Once created, this computed is **immutable** — ccstate caches its resolved value forever (no dependencies change). This is the key insight: old pages are never re-fetched.
 
-| Pros | Cons |
-|------|------|
-| 1 API call per tick (only new events) | `Computed<Computed<Promise<Event[]>>[]>` hard to reason about |
-| Old pages cached, zero re-fetching | Mutable state for page list management |
-| Bandwidth efficient at scale | Manual cleanup on logId change |
-| — | Initial load becomes a command, not pure computed |
-| — | Complex error handling (what if one page fails?) |
+#### Step 2: Initial Load (command)
 
-### Approach 3: Hybrid (pure computed initial + incremental polling state)
+```typescript
+const initEventPages$ = command(({ get, set }, runId: string) => {
+  // Create first page (no `since` param)
+  const firstPage = createEventPageComputed(runId);
+  set(pagedEvents$, [firstPage]);
+});
+```
 
-Initial load stays as pure computed. Polling appends to a separate `polledEvents$` state. `allEvents$` merges both.
+Unlike the current `allEvents$` pure computed (while-loop), initial load is now a command that creates the first page computed. This is a deliberate trade-off: we lose automatic re-evaluation on logId change, but gain incremental polling capability.
 
-| Pros | Cons |
-|------|------|
-| Initial load stays pure computed | Introduces mutable state (`polledEvents$`) |
-| Polling is incremental | Manual reset on logId change |
-| Simpler than Approach 2 | Mixes computed + state in `allEvents$` |
+**Note:** The first page returns up to 30 events. If `hasMore` is true, we need to load remaining pages eagerly before polling starts. This is done in the setup command (Step 4).
+
+#### Step 3: Poll Tick — Append New Pages
+
+```typescript
+const pollNewEvents$ = command(async ({ get, set }, runId: string) => {
+  const pages = get(pagedEvents$);
+  if (pages.length === 0) return;
+
+  // Resolve the last page to get its last event's timestamp
+  const lastPage = await get(pages[pages.length - 1]);
+  if (lastPage.events.length === 0) return;
+
+  const lastEvent = lastPage.events[lastPage.events.length - 1];
+  const since = lastEvent.createdAt;
+
+  // Create a new page computed for events after `since`
+  const newPage = createEventPageComputed(runId, since);
+  const newPageResult = await get(newPage);
+
+  // Only append if there are actually new events
+  if (newPageResult.events.length > 0) {
+    set(pagedEvents$, (prev) => [...prev, newPage]);
+  }
+});
+```
+
+Each poll tick: 1 API call. Old pages untouched.
+
+#### Step 4: Setup Polling (command with AbortSignal)
+
+```typescript
+const POLL_INTERVAL = 3000;
+const MAX_INTERVAL = 30000;
+
+const setupPolling$ = command(async ({ get, set }, signal: AbortSignal) => {
+  const logId = get(currentLogId$);
+  if (!logId) return;
+
+  // Phase 1: Eager initial load — fetch all existing pages
+  set(initEventPages$, logId);
+  let keepLoading = true;
+  while (keepLoading && !signal.aborted) {
+    const pages = get(pagedEvents$);
+    const lastPage = await get(pages[pages.length - 1]);
+    if (lastPage.hasMore && lastPage.events.length > 0) {
+      const lastEvent = lastPage.events[lastPage.events.length - 1];
+      const nextPage = createEventPageComputed(logId, lastEvent.createdAt);
+      set(pagedEvents$, (prev) => [...prev, nextPage]);
+    } else {
+      keepLoading = false;
+    }
+  }
+
+  // Phase 2: Check if already terminal — skip polling if so
+  const detail$ = set(getOrCreateLogDetail$, logId);
+  const detail = await get(detail$);
+  if (detail && isTerminalStatus(detail.status)) return;
+
+  // Phase 3: Polling loop
+  let polling = false;
+  let errorCount = 0;
+  let interval = POLL_INTERVAL;
+
+  const timer = setInterval(async () => {
+    if (polling || signal.aborted) return;
+    polling = true;
+    try {
+      // Re-fetch log detail to check status (detail is NOT cached per-page,
+      // so we need a reload mechanism for it — see Step 5)
+      const currentDetail = await refetchLogDetail(get, set, logId);
+      if (currentDetail && isTerminalStatus(currentDetail.status)) {
+        clearInterval(timer);
+        return;
+      }
+
+      // Fetch new events
+      await set(pollNewEvents$, logId);
+      errorCount = 0;
+      interval = POLL_INTERVAL;
+    } catch {
+      errorCount++;
+      interval = Math.min(POLL_INTERVAL * 2 ** errorCount, MAX_INTERVAL);
+      clearInterval(timer);
+      // Reschedule with backoff (simplified — real impl uses dynamic timer)
+    } finally {
+      polling = false;
+    }
+  }, interval);
+
+  signal.addEventListener("abort", () => clearInterval(timer));
+});
+
+function isTerminalStatus(status: string): boolean {
+  return ["completed", "failed", "timeout", "cancelled"].includes(status);
+}
+```
+
+#### Step 5: Log Detail Re-fetch
+
+Log detail (status, timing, etc.) changes during a run. Unlike events (append-only), detail must be **re-fetched** each tick to detect terminal status.
+
+Two options:
+- **Option A:** Use a `reloadTick$` signal on `logDetail$` only (not events). Lightweight — 1 extra API call per tick for just the detail endpoint.
+- **Option B:** Create a new `logDetail$` computed each tick and replace in cache. But this defeats caching.
+
+**Recommendation: Option A** — add `reloadTick$` to the detail computed only. Events stay incremental.
+
+```typescript
+const detailReloadTick$ = state(0);
+
+// Modified detail factory
+function createLogDetailComputed(logId: string): Computed<Promise<LogDetail>> {
+  return computed(async (get) => {
+    get(detailReloadTick$);  // re-fetch when ticked
+    const fetchFn = get(fetch$);
+    const response = await fetchFn(`/api/platform/logs/${logId}`);
+    if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
+    return (await response.json()) as LogDetail;
+  });
+}
+```
+
+React uses `useLastLoadable(logDetail$)` to avoid flicker on detail re-fetch.
+
+#### Step 6: LogId Change Cleanup
+
+When user navigates to a different log, we must reset `pagedEvents$`:
+
+```typescript
+const setupLogDetailPage$ = command(({ get, set }, signal: AbortSignal) => {
+  const logId = get(currentLogId$);
+
+  // Reset page state for new logId
+  set(pagedEvents$, []);
+  set(detailReloadTick$, 0);
+
+  if (!logId) return;
+
+  // Start polling (includes initial load)
+  set(setupPolling$, signal);
+});
+```
+
+This is a **command**, not a pure computed. The cleanup is explicit, not automatic. This is the trade-off we accept for incremental efficiency.
 
 ---
 
-## Comparison Matrix
+## React Integration
 
-| Dimension | 1: Reload | 2: Computed/Args | 3: Hybrid |
-|-----------|-----------|-----------------|-----------|
-| Complexity | Very low | High | Medium |
-| Purity | Pure computed | Needs mutable state | Needs mutable state |
-| API calls/tick | N (all pages) | 1 (new only) | 1 (new only) |
-| Small event count | Great | Over-engineered | Fine |
-| Large event count | Wasteful | Great | Great |
-| ccstate philosophy | Aligned | Mixed | Mixed |
-| Error handling | Simple | Complex | Medium |
-| logId switch cleanup | Automatic | Manual | Manual |
+```typescript
+// In LogDetailPage component
+const allEventsLoadable = useLastLoadable(allEvents$);
+const logDetailLoadable = useLastLoadable(logDetail$);
+
+// useLastLoadable keeps showing previous data while new data loads
+// No loading flicker between polls
+```
+
+Key: `useLastLoadable` (not `useLoadable`) for both detail and events. This prevents the UI from flickering to a loading state on each poll tick.
 
 ---
 
-## Risk Points
+## Risk Points & Mitigations (adapted for incremental)
 
 ### 1. Overlapping polls
 
-If the previous fetch hasn't returned and the next interval fires, you get concurrent requests — wasted bandwidth and potential race conditions.
-
-**Mitigation:** In-flight guard. Skip the tick if the previous poll is still pending.
-
-```typescript
-let polling = false;
-const timer = setInterval(async () => {
-  if (polling) return;  // single-flight lock
-  polling = true;
-  try {
-    set(reloadTick$, (x) => x + 1);
-    // await settle if needed
-  } finally {
-    polling = false;
-  }
-}, 3000);
-```
+Same risk as before. The `polling` flag (single-flight lock) prevents concurrent poll ticks.
 
 ### 2. Dedup / ordering
 
-Even with full re-fetch, need to confirm events are sorted by `sequenceNumber` and that React doesn't duplicate renders. With Approach 1 this is naturally handled — each re-fetch replaces the entire array. But ensure the API always returns events in deterministic order (not just by `createdAt` which can have identical timestamps).
+With incremental, dedup is critical: if `since` returns events overlapping with the previous page, we get duplicates.
 
-**Mitigation:** API uses `ORDER BY sequenceNumber ASC`. Already the case in current implementation.
+**Mitigation:** The API's `since` parameter is exclusive (events strictly after the timestamp). But if two events share the same `createdAt`, we could miss or duplicate. The API orders by `sequenceNumber ASC`, which is deterministic. The `since` filter works on timestamp, not sequenceNumber.
+
+**Action needed:** Verify the API's `since` filter is exclusive (`> since`, not `>= since`). If inclusive, add client-side dedup by `sequenceNumber`:
+
+```typescript
+// In allEvents$ computed, after flatMap:
+const seen = new Set<number>();
+return allResults.flatMap(r => r.events).filter(e => {
+  if (seen.has(e.sequenceNumber)) return false;
+  seen.add(e.sequenceNumber);
+  return true;
+});
+```
 
 ### 3. Stop condition
 
-Run transitions to terminal status (completed/failed/timeout/cancelled) — polling must stop reliably to avoid unnecessary requests.
-
-**Mitigation:** Each tick checks `logDetail$` status before bumping `reloadTick$`. But since `logDetail$` is async computed, the check must await the previous resolve. Combine with the in-flight guard:
-
-```typescript
-const timer = setInterval(async () => {
-  if (polling) return;
-  polling = true;
-  try {
-    const detail = await store.get(logDetail$);
-    if (detail && isTerminalStatus(detail.status)) {
-      clearInterval(timer);
-      return;
-    }
-    set(reloadTick$, (x) => x + 1);
-  } finally {
-    polling = false;
-  }
-}, 3000);
-```
+Handled by re-fetching `logDetail$` each tick (via `detailReloadTick$`) and checking terminal status before polling new events.
 
 ### 4. Error backoff
 
-Fixed 3s interval with continuous failures hammers the API. Network blips or server errors need exponential backoff.
+Same exponential backoff pattern. Consecutive errors increase interval (3s -> 6s -> 12s -> max 30s). Success resets to 3s.
 
-**Mitigation:** Track consecutive error count, increase interval:
+### 5. Empty poll optimization
 
-```typescript
-let errorCount = 0;
-const BASE_INTERVAL = 3000;
-const MAX_INTERVAL = 30000;
+Most poll ticks return 0 new events (agent is thinking, not emitting). The `pollNewEvents$` command handles this by checking `newPageResult.events.length > 0` before appending. No empty page computeds accumulate.
 
-// After each tick:
-// - Success: errorCount = 0
-// - Error: errorCount++, next interval = min(BASE * 2^errorCount, MAX)
+### 6. Memory — page computed accumulation
+
+Each poll that finds new events creates a new `Computed`. For very long runs (1000+ events, 30+ pages), this means 30+ computeds in memory.
+
+**Assessment:** Acceptable. Each resolved computed holds a small array (30 events). The ccstate garbage collector handles unreferenced computeds. When `pagedEvents$` is reset on logId change, old computeds become unreferenced.
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `logs-signals.ts` | Add `pagedEvents$`, `allEvents$`, `createEventPageComputed()`, `pollNewEvents$`, `setupPolling$`, `detailReloadTick$` |
+| `logs-signals.ts` | Modify `createLogDetailComputed()` to depend on `detailReloadTick$` |
+| `logs-signals.ts` | Add `setupLogDetailPage$` command for cleanup on logId change |
+| `log-detail-page.ts` | Call `setupLogDetailPage$` instead of manual fetch setup |
+| React components | Switch from `useLoadable` to `useLastLoadable` for detail + events |
+| `types.ts` | No changes needed (AgentEvent, AgentEventsResponse already defined) |
+
+**Estimated scope:** ~150 lines of signal logic + ~20 lines of React wiring
+
+---
+
+## Sequence Diagram
+
+```
+User opens log detail page
+    │
+    ├─ setupLogDetailPage$ fires
+    │   ├─ reset pagedEvents$ = []
+    │   ├─ setupPolling$ starts
+    │   │   ├─ Phase 1: Eager load
+    │   │   │   ├─ createEventPageComputed(logId)         → page 0 (events 1-30)
+    │   │   │   ├─ hasMore? → createEventPageComputed(logId, since=event30.createdAt) → page 1 (events 31-60)
+    │   │   │   └─ hasMore=false → done
+    │   │   │
+    │   │   ├─ Phase 2: Check terminal → not terminal, start polling
+    │   │   │
+    │   │   └─ Phase 3: Every 3s
+    │   │       ├─ Re-fetch logDetail$ (detailReloadTick$++)
+    │   │       ├─ Terminal? → stop
+    │   │       └─ pollNewEvents$ → 1 API call
+    │   │           ├─ 0 new events → no-op
+    │   │           └─ N new events → append 1 new page computed
+    │   │
+    │   └─ signal.abort → clearInterval
+    │
+    └─ React: useLastLoadable(allEvents$) renders events, no flicker
 ```
 
-### 5. Page count growth risk
+---
 
-Currently acceptable (10-200 events = 1-7 pages), but if agent runs grow longer, full re-fetch becomes expensive.
+## Open Questions
 
-**Mitigation:** Observability. Log per-poll metrics (page count, total fetch duration). Set threshold: if avg pages/tick > 5 or p95 poll duration > 1s, evaluate switching to Approach 3.
+1. **`since` filter inclusivity** — Need to verify API uses `>` not `>=` on the `since` timestamp. If `>=`, need client-side sequenceNumber dedup.
+2. **Initial load: eager vs lazy** — Current plan eagerly loads all pages on mount. Alternative: load first page, show it, then load rest in background. Which UX does e7h4n prefer?
+3. **Detail re-fetch approach** — Using `detailReloadTick$` on the detail computed. Alternative: separate `pollingDetail$` state that replaces each tick. The tick approach is simpler but makes the detail computed impure (depends on mutable counter). e7h4n may have opinions on this.
 
 ---
 
-## Decision
+## Decision Record
 
-### Short-term: Approach 1 with two guardrails
-
-1. **Single-flight lock** — skip tick if previous poll still in-flight
-2. **Basic backoff** — increase interval on consecutive errors (3s → 6s → 12s → max 30s)
-
-### Mid-term: observation threshold
-
-If avg pages/tick > 5 or p95 poll duration > 1s, evaluate Approach 3 (hybrid incremental).
-
-### Not now: Approach 2
-
-Mental overhead and error surface too large. Over-engineered for current needs.
-
-### One-liner
-
-Start with Approach 1 (reload signal) for simplicity and ccstate purity, but add "no overlapping polls + error backoff" guardrails. Upgrade to incremental if metrics prove it necessary.
+| Date | Decision | By |
+|------|----------|------|
+| 2026-02-09 | Start with Approach 1 (reload signal) | Our recommendation |
+| 2026-02-09 | Use Approach 2 (incremental) | e7h4n's decision |
 
 ---
 
-## Open item
-
-e7h4n hasn't decided yet (his comment: "still not very certain"). Need to discuss with him before implementation. Key question: does he accept full re-fetch cost, or insist on incremental from the start?
-
----
-
-*Sources: PR #2716, #2746, #2773, Issue #2730, e7h4n comment on polling approaches, ccstate docs (computed with arguments, useLastLoadable)*
+*Sources: PR #2716, #2746, #2773, Issue #2730, e7h4n comment on polling approaches, ccstate docs (computed with arguments, useLastLoadable), logs-signals.ts current implementation*
