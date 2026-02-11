@@ -291,21 +291,7 @@ Same risk as before. The `polling` flag (single-flight lock) prevents concurrent
 
 ### 2. Dedup / ordering
 
-With incremental, dedup is critical: if `since` returns events overlapping with the previous page, we get duplicates.
-
-**Mitigation:** The API's `since` parameter is exclusive (events strictly after the timestamp). But if two events share the same `createdAt`, we could miss or duplicate. The API orders by `sequenceNumber ASC`, which is deterministic. The `since` filter works on timestamp, not sequenceNumber.
-
-**Action needed:** Verify the API's `since` filter is exclusive (`> since`, not `>= since`). If inclusive, add client-side dedup by `sequenceNumber`:
-
-```typescript
-// In allEvents$ computed, after flatMap:
-const seen = new Set<number>();
-return allResults.flatMap(r => r.events).filter(e => {
-  if (seen.has(e.sequenceNumber)) return false;
-  seen.add(e.sequenceNumber);
-  return true;
-});
-```
+**Verified: not an issue.** API uses `_time > datetime(...)` (exclusive, `route.ts:76`). Combined with `sequenceNumber ASC` ordering, there is no overlap between pages. Axiom timestamps have nanosecond precision, so same-timestamp collision is negligible. No client-side dedup needed.
 
 ### 3. Stop condition
 
@@ -371,11 +357,11 @@ User opens log detail page
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **`since` filter inclusivity** — Need to verify API uses `>` not `>=` on the `since` timestamp. If `>=`, need client-side sequenceNumber dedup.
-2. **Initial load: eager vs lazy** — Current plan eagerly loads all pages on mount. Alternative: load first page, show it, then load rest in background. Which UX does e7h4n prefer?
-3. **Detail re-fetch approach** — Using `detailReloadTick$` on the detail computed. Alternative: separate `pollingDetail$` state that replaces each tick. The tick approach is simpler but makes the detail computed impure (depends on mutable counter). e7h4n may have opinions on this.
+1. **`since` filter is exclusive (`>`)** — Verified in `route.ts:76`: `` `| where _time > datetime("${new Date(since).toISOString()}")` ``. No client-side dedup needed. Edge case: Axiom `_time` has nanosecond precision, so same-timestamp collision is negligible.
+2. **Initial load: eager** — Consistent with current `allEvents$` behavior (while-loop loads all). In polling context user won't manually "load more", so eager is correct.
+3. **Detail re-fetch: `detailReloadTick$`** — Minimal change to existing factory+cache pattern. Only affects `logDetail$`, not events. Acceptable trade-off.
 
 ---
 
