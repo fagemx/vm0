@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.20.0](https://github.com/fagemx/vm0/compare/runner-v3.19.6...runner-v3.20.0) (2026-02-21)
+
+
+### Features
+
+* **cli:** add --porcelain option to compose command ([#2494](https://github.com/fagemx/vm0/issues/2494)) ([f5f5a3f](https://github.com/fagemx/vm0/commit/f5f5a3fad10cff2a2cc7e962d40062f9c004fd88))
+* **guest-agent:** implement rust guest-agent crate ([#2759](https://github.com/fagemx/vm0/issues/2759)) ([8a91042](https://github.com/fagemx/vm0/commit/8a910429b6adb47c86659638e69f5a6d024e4851))
+* **guest-mock-claude:** add rust mock-claude binary for firecracker vms ([#2783](https://github.com/fagemx/vm0/issues/2783)) ([d06b37a](https://github.com/fagemx/vm0/commit/d06b37a3c19449f049c83cf32b690bf40c6f77a5))
+* **runner:** add vm-common and vm-download rust crates ([#2463](https://github.com/fagemx/vm0/issues/2463)) ([d463ed1](https://github.com/fagemx/vm0/commit/d463ed1766b8c18325e21804e01fcd0e9ed747e8))
+* **vsock:** add environment variable support to exec/spawn_watch ([#2736](https://github.com/fagemx/vm0/issues/2736)) ([6f93486](https://github.com/fagemx/vm0/commit/6f9348601ae5736e20a8c32a2064ac394a70e70b))
+* **vsock:** add sudo flag to exec/spawn_watch protocol ([#2985](https://github.com/fagemx/vm0/issues/2985)) ([9c42331](https://github.com/fagemx/vm0/commit/9c423314a07f8de0f1b92ea3adca4efa4c6de987)), closes [#2984](https://github.com/fagemx/vm0/issues/2984)
+
+
+### Bug Fixes
+
+* **guest-download:** only treat 404 as non-fatal for artifact downloads ([#2900](https://github.com/fagemx/vm0/issues/2900)) ([8711a0f](https://github.com/fagemx/vm0/commit/8711a0f5cfad3ac0fa8eda31ff74d48e3fbcde6e))
+* **runner:** make runner sole reporter of job completion ([#2852](https://github.com/fagemx/vm0/issues/2852)) ([807e2f9](https://github.com/fagemx/vm0/commit/807e2f9489ff4780eb3ff235d0eac2baae1b37d1))
+* **vsock-guest:** handle echild race with pid 1 zombie reaper ([#3118](https://github.com/fagemx/vm0/issues/3118)) ([985f349](https://github.com/fagemx/vm0/commit/985f349134b981d6123fe26ee79f991ec56ceb59))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @vm0/core bumped to 8.19.0
+
 ## [3.19.6](https://github.com/vm0-ai/vm0/compare/runner-v3.19.5...runner-v3.19.6) (2026-02-18)
 
 

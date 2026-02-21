@@ -1,5 +1,43 @@
 # Changelog
 
+## [8.19.0](https://github.com/fagemx/vm0/compare/core-v8.18.0...core-v8.19.0) (2026-02-21)
+
+
+### Features
+
+* add computer connector api for authenticated local tunneling via ngrok ([#2937](https://github.com/fagemx/vm0/issues/2937)) ([4f3fc4e](https://github.com/fagemx/vm0/commit/4f3fc4ebf137409a30b85b5882634a6bb8846836))
+* add gmail connector with nango platform integration ([#3065](https://github.com/fagemx/vm0/issues/3065)) ([d43dfe1](https://github.com/fagemx/vm0/commit/d43dfe1a5a868c8413ffd2b8a250d48dafc791cb))
+* add notify-slack preference to gate slack schedule notifications ([#2945](https://github.com/fagemx/vm0/issues/2945)) ([a0058e6](https://github.com/fagemx/vm0/commit/a0058e6d2c2a7f6c4d20c78a287488ba843cce02))
+* allow users to set timezone preference for sandbox and scheduling ([#2866](https://github.com/fagemx/vm0/issues/2866)) ([89437c7](https://github.com/fagemx/vm0/commit/89437c733b4e34eee46009b20c99f455c5963289))
+* **api:** add backend support for agent detail page ([#2979](https://github.com/fagemx/vm0/issues/2979)) ([4103d8f](https://github.com/fagemx/vm0/commit/4103d8f66ccc9546bccc67454d139b8d1de04599))
+* **cli:** add --check-env flag to vm0 run commands ([#2760](https://github.com/fagemx/vm0/issues/2760)) ([f6711e0](https://github.com/fagemx/vm0/commit/f6711e0d047aa872c76f97c8cfaf1257d2f35fb0))
+* **cli:** add agent delete command ([#2767](https://github.com/fagemx/vm0/issues/2767)) ([11d555a](https://github.com/fagemx/vm0/commit/11d555ad5432a9893ddc37e55f89a58e7dd5657c))
+* **cli:** add computer connector support ([#3124](https://github.com/fagemx/vm0/issues/3124)) ([a950821](https://github.com/fagemx/vm0/commit/a9508213014337b0a4a7effb4756ed7056e3cb0f))
+* **cli:** add filtering options to run list command ([#2646](https://github.com/fagemx/vm0/issues/2646)) ([73c3509](https://github.com/fagemx/vm0/commit/73c3509380b5038eb5b97df6ab50106d41ea7358))
+* **cli:** show connector-derived secret names in secret list ([#2602](https://github.com/fagemx/vm0/issues/2602)) ([877a318](https://github.com/fagemx/vm0/commit/877a31858cf10b7d3d6060d6e10e606c22cd2a83)), closes [#2601](https://github.com/fagemx/vm0/issues/2601)
+* **connector:** implement github oauth connector with cli support ([#2446](https://github.com/fagemx/vm0/issues/2446)) ([c12c97a](https://github.com/fagemx/vm0/commit/c12c97a2af0b74d8bdfd452e2cbe7000f9e24f34))
+* **core:** add glm-5 model and fix model id casing ([#2889](https://github.com/fagemx/vm0/issues/2889)) ([f7dff90](https://github.com/fagemx/vm0/commit/f7dff9098110a983c8bf6c15740fa01010f09f5b)), closes [#2883](https://github.com/fagemx/vm0/issues/2883)
+* **email:** add email notifications and reply-to-continue via Resend ([#2836](https://github.com/fagemx/vm0/issues/2836)) ([fd6aa4c](https://github.com/fagemx/vm0/commit/fd6aa4c032a84f25e8c6a8cf4ba4cef5ff070bd9))
+* **platform:** add agent detail page with feature flag gating ([#2998](https://github.com/fagemx/vm0/issues/2998)) ([5386de0](https://github.com/fagemx/vm0/commit/5386de0662eb2a85e69040788e2ca08e7f976cba))
+* **storage:** add optional volume support for graceful degradation ([#2929](https://github.com/fagemx/vm0/issues/2929)) ([fd052a4](https://github.com/fagemx/vm0/commit/fd052a4fef4b2157bb1b1a7a2a0eaccffa6ff262))
+* use ngrok reserved domains for computer connector ([#3116](https://github.com/fagemx/vm0/issues/3116)) ([7e30f2c](https://github.com/fagemx/vm0/commit/7e30f2c83f7fb4f82dd0b1e9aed38267ca5919f9))
+* **vsock:** add environment variable support to exec/spawn_watch ([#2736](https://github.com/fagemx/vm0/issues/2736)) ([6f93486](https://github.com/fagemx/vm0/commit/6f9348601ae5736e20a8c32a2064ac394a70e70b))
+* **web:** add Notion OAuth connector support ([#2738](https://github.com/fagemx/vm0/issues/2738)) ([a201b5d](https://github.com/fagemx/vm0/commit/a201b5d7ffdd081b4a9f299297bad0e06fa890b1))
+* **web:** add server-side github compose api ([#2473](https://github.com/fagemx/vm0/issues/2473)) ([9ab1f23](https://github.com/fagemx/vm0/commit/9ab1f2344f11086fd0f4c30036d04c72fab61b68))
+
+
+### Bug Fixes
+
+* **cli:** support repository root GitHub URLs in vm0 compose ([#2427](https://github.com/fagemx/vm0/issues/2427)) ([6c0ba38](https://github.com/fagemx/vm0/commit/6c0ba385bdca8a63d1bff03840d0595150d78cd4)), closes [#2423](https://github.com/fagemx/vm0/issues/2423)
+* **core:** handle trailing slashes in GitHub URL parsing ([#2459](https://github.com/fagemx/vm0/issues/2459)) ([10226c7](https://github.com/fagemx/vm0/commit/10226c74372cfd3a9e9f08295ad086c41e80acc7)), closes [#2455](https://github.com/fagemx/vm0/issues/2455)
+* **docs:** update aws bedrock setup guide url ([#2495](https://github.com/fagemx/vm0/issues/2495)) ([8026a4a](https://github.com/fagemx/vm0/commit/8026a4a185ebea25738d580ebe8cda5ea067d59e))
+* exclude connector-provided secrets from missing-secrets checks ([#2752](https://github.com/fagemx/vm0/issues/2752)) ([3dc98d4](https://github.com/fagemx/vm0/commit/3dc98d47451a2084b50a9a6ebce2f2ccb31d2833)), closes [#2747](https://github.com/fagemx/vm0/issues/2747)
+* remove nango integration and simplify oauth flow ([#3105](https://github.com/fagemx/vm0/issues/3105)) ([a1c601e](https://github.com/fagemx/vm0/commit/a1c601e2217456d16b1e34de0a41fe61a0026e7a))
+* **sandbox:** remove prompt content from agent execution logs ([#2653](https://github.com/fagemx/vm0/issues/2653)) ([cfc8b2d](https://github.com/fagemx/vm0/commit/cfc8b2dfecb0120d3e83bb0b7568e0b9916b3414))
+* **schedule:** validate secrets/vars against platform tables ([#2558](https://github.com/fagemx/vm0/issues/2558)) ([f19d550](https://github.com/fagemx/vm0/commit/f19d5506e61f16536bf163e5884266d31326fe40))
+* **web:** disable json query to fix flaky ambiguous-prefix test ([#2701](https://github.com/fagemx/vm0/issues/2701)) ([a5f8e8a](https://github.com/fagemx/vm0/commit/a5f8e8a375a3a84c46518780201b66f75ea845a3))
+* **web:** inject connector secrets into agent execution environment ([#2584](https://github.com/fagemx/vm0/issues/2584)) ([f483b5b](https://github.com/fagemx/vm0/commit/f483b5b0c0c94e45a149f99b8f108c3fc74399a4))
+
 ## [8.18.0](https://github.com/vm0-ai/vm0/compare/core-v8.17.0...core-v8.18.0) (2026-02-18)
 
 

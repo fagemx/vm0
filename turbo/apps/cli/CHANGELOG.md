@@ -1,5 +1,83 @@
 # Changelog
 
+## [9.39.0](https://github.com/fagemx/vm0/compare/cli-v9.38.1...cli-v9.39.0) (2026-02-21)
+
+
+### Features
+
+* add notify-slack preference to gate slack schedule notifications ([#2945](https://github.com/fagemx/vm0/issues/2945)) ([a0058e6](https://github.com/fagemx/vm0/commit/a0058e6d2c2a7f6c4d20c78a287488ba843cce02))
+* allow users to set timezone preference for sandbox and scheduling ([#2866](https://github.com/fagemx/vm0/issues/2866)) ([89437c7](https://github.com/fagemx/vm0/commit/89437c733b4e34eee46009b20c99f455c5963289))
+* **cli:** add --check-env flag to vm0 run commands ([#2760](https://github.com/fagemx/vm0/issues/2760)) ([f6711e0](https://github.com/fagemx/vm0/commit/f6711e0d047aa872c76f97c8cfaf1257d2f35fb0))
+* **cli:** add --json flag and deprecate --porcelain ([#2613](https://github.com/fagemx/vm0/issues/2613)) ([f4fcdb1](https://github.com/fagemx/vm0/commit/f4fcdb19b1766386fc89fc69d0f82901fb06db26))
+* **cli:** add --porcelain option to compose command ([#2494](https://github.com/fagemx/vm0/issues/2494)) ([f5f5a3f](https://github.com/fagemx/vm0/commit/f5f5a3fad10cff2a2cc7e962d40062f9c004fd88))
+* **cli:** add agent delete command ([#2767](https://github.com/fagemx/vm0/issues/2767)) ([11d555a](https://github.com/fagemx/vm0/commit/11d555ad5432a9893ddc37e55f89a58e7dd5657c))
+* **cli:** add auto-pagination to logs command ([#2855](https://github.com/fagemx/vm0/issues/2855)) ([e487a1a](https://github.com/fagemx/vm0/commit/e487a1a687146002f3d7abf2b4904b507b3b29c5))
+* **cli:** add computer connector support ([#3124](https://github.com/fagemx/vm0/issues/3124)) ([a950821](https://github.com/fagemx/vm0/commit/a9508213014337b0a4a7effb4756ed7056e3cb0f))
+* **cli:** add connector list and disconnect commands ([#2570](https://github.com/fagemx/vm0/issues/2570)) ([aec1120](https://github.com/fagemx/vm0/commit/aec1120600d0ab0709803f643038493ecc6f8bb9))
+* **cli:** add connector status command for detailed connector view ([#2582](https://github.com/fagemx/vm0/issues/2582)) ([c342888](https://github.com/fagemx/vm0/commit/c342888a913edb0d7e382bc4b76b91e136decf6b)), closes [#2571](https://github.com/fagemx/vm0/issues/2571)
+* **cli:** add dashboard command with guided help ([#2574](https://github.com/fagemx/vm0/issues/2574)) ([4e1d37a](https://github.com/fagemx/vm0/commit/4e1d37ad35046bb8d4cfbcec3e7028415e2339e5))
+* **cli:** add filtering options to run list command ([#2646](https://github.com/fagemx/vm0/issues/2646)) ([73c3509](https://github.com/fagemx/vm0/commit/73c3509380b5038eb5b97df6ab50106d41ea7358))
+* **cli:** add interactive mode and --body flag for secret set command ([#2441](https://github.com/fagemx/vm0/issues/2441)) ([8d75b85](https://github.com/fagemx/vm0/commit/8d75b85bbe7a2c29b586ac832f040d4c073ee2ce))
+* **cli:** enable GitHub URL compose without experimental flag ([#2728](https://github.com/fagemx/vm0/issues/2728)) ([3158138](https://github.com/fagemx/vm0/commit/315813840b9590aca5d5f52575dcb24ddfebbae2)), closes [#2724](https://github.com/fagemx/vm0/issues/2724)
+* **cli:** enhance vm0 info command with debug-focused output ([#2643](https://github.com/fagemx/vm0/issues/2643)) ([cc9ed3c](https://github.com/fagemx/vm0/commit/cc9ed3c25fb7f0cc18cadf37b7944fe2720f5808)), closes [#2639](https://github.com/fagemx/vm0/issues/2639)
+* **cli:** integrate sentry for error monitoring ([#2416](https://github.com/fagemx/vm0/issues/2416)) ([d6b2937](https://github.com/fagemx/vm0/commit/d6b29374bd6842e6e531b11c207a231cb1bce539))
+* **cli:** run auto-upgrade in parallel with command execution ([#2647](https://github.com/fagemx/vm0/issues/2647)) ([cd39243](https://github.com/fagemx/vm0/commit/cd39243dea21768a25b191cb89a7e0c0dae89a49)), closes [#2636](https://github.com/fagemx/vm0/issues/2636)
+* **cli:** show connector-derived secret names in secret list ([#2602](https://github.com/fagemx/vm0/issues/2602)) ([877a318](https://github.com/fagemx/vm0/commit/877a31858cf10b7d3d6060d6e10e606c22cd2a83)), closes [#2601](https://github.com/fagemx/vm0/issues/2601)
+* **connector:** implement github oauth connector with cli support ([#2446](https://github.com/fagemx/vm0/issues/2446)) ([c12c97a](https://github.com/fagemx/vm0/commit/c12c97a2af0b74d8bdfd452e2cbe7000f9e24f34))
+* **email:** add email notifications and reply-to-continue via Resend ([#2836](https://github.com/fagemx/vm0/issues/2836)) ([fd6aa4c](https://github.com/fagemx/vm0/commit/fd6aa4c032a84f25e8c6a8cf4ba4cef5ff070bd9))
+* **platform:** add environment variables setup page ([#2737](https://github.com/fagemx/vm0/issues/2737)) ([d33842a](https://github.com/fagemx/vm0/commit/d33842a2e5e72eb5bfebe66cd442135b49f35a51))
+* **slack:** send DM notification when scheduled agent run completes ([#2720](https://github.com/fagemx/vm0/issues/2720)) ([77cf47b](https://github.com/fagemx/vm0/commit/77cf47b9911a28394bd0b851d75183ea22764bab))
+* **storage:** add optional volume support for graceful degradation ([#2929](https://github.com/fagemx/vm0/issues/2929)) ([fd052a4](https://github.com/fagemx/vm0/commit/fd052a4fef4b2157bb1b1a7a2a0eaccffa6ff262))
+* **web:** add server-side github compose api ([#2473](https://github.com/fagemx/vm0/issues/2473)) ([9ab1f23](https://github.com/fagemx/vm0/commit/9ab1f2344f11086fd0f4c30036d04c72fab61b68))
+
+
+### Bug Fixes
+
+* **ci:** unique runner name per metal host ([#3141](https://github.com/fagemx/vm0/issues/3141)) ([ad5dcf4](https://github.com/fagemx/vm0/commit/ad5dcf49e603392ac476d2e44a033e635756d47b))
+* **cli:** add environment and release to sentry config and prevent test leaks ([#2706](https://github.com/fagemx/vm0/issues/2706)) ([56578ad](https://github.com/fagemx/vm0/commit/56578adccbdb20b8299ef0d66e44526d4eaf2a1d))
+* **cli:** add error handling to connector connect and display error.cause ([#2682](https://github.com/fagemx/vm0/issues/2682)) ([d19a29e](https://github.com/fagemx/vm0/commit/d19a29e5e2134de5fd7b28bb1ee16467cb6d7046))
+* **cli:** add error handling to login command and fix sentry filter ([#2650](https://github.com/fagemx/vm0/issues/2650)) ([8145fab](https://github.com/fagemx/vm0/commit/8145fab77f22cec51dd8b69ec4508d33f440b42c))
+* **cli:** add homebrew arm64 path detection for auto-upgrade ([#2648](https://github.com/fagemx/vm0/issues/2648)) ([870c74a](https://github.com/fagemx/vm0/commit/870c74ac3f8aae4cab08adbcea4dcc0c26ae0393)), closes [#2637](https://github.com/fagemx/vm0/issues/2637)
+* **cli:** add missing try/catch to auth and cook commands ([#2690](https://github.com/fagemx/vm0/issues/2690)) ([216758d](https://github.com/fagemx/vm0/commit/216758de8f0a860dde5c5b69df9ea15e0eddccb7))
+* **cli:** add missing try/catch to onboard command ([#2699](https://github.com/fagemx/vm0/issues/2699)) ([cec0044](https://github.com/fagemx/vm0/commit/cec00445c45b0ce6ff2cc8a5e83191442b85d126))
+* **cli:** align error symbols, color semantics, and message formatting with design guideline ([#2615](https://github.com/fagemx/vm0/issues/2615)) ([1e70bc2](https://github.com/fagemx/vm0/commit/1e70bc23b917c9b8f5132b11029941030e17d4c1))
+* **cli:** check dependencies before connecting computer connector ([#3146](https://github.com/fagemx/vm0/issues/3146)) ([1e9d814](https://github.com/fagemx/vm0/commit/1e9d814ea5b49fbe687bbab3e6b8357fbdbe7619))
+* **cli:** display error.cause for fetch failures and fix onboard auth error handling ([#2669](https://github.com/fagemx/vm0/issues/2669)) ([658e998](https://github.com/fagemx/vm0/commit/658e9985705229cd8500f90c2183f1af8923cad9))
+* **cli:** map 401/403 responses to user-friendly error messages ([#2475](https://github.com/fagemx/vm0/issues/2475)) ([ed384fb](https://github.com/fagemx/vm0/commit/ed384fb109c32046335f789f42974261d8c05fec))
+* **cli:** map 403 forbidden to user-friendly message in auth flow ([#2673](https://github.com/fagemx/vm0/issues/2673)) ([959d79d](https://github.com/fagemx/vm0/commit/959d79d7a99c91e38a97756f5acccd5045905e1c))
+* **cli:** remove client-side env validation from cook command ([#2626](https://github.com/fagemx/vm0/issues/2626)) ([7d8c4c8](https://github.com/fagemx/vm0/commit/7d8c4c890fe96e1ca38f08a7a4dbfa5687997224))
+* **cli:** remove session code display from connector connect ([#2569](https://github.com/fagemx/vm0/issues/2569)) ([2a8fae3](https://github.com/fagemx/vm0/commit/2a8fae30b90764d089140fde15cbf3df021c7563))
+* **cli:** route error messages and hints to stderr across all commands ([#2614](https://github.com/fagemx/vm0/issues/2614)) ([4d7d406](https://github.com/fagemx/vm0/commit/4d7d406481f86ab39d17333b9ac550b943b6ea8f))
+* **cli:** route error messages to stderr in init command ([#2612](https://github.com/fagemx/vm0/issues/2612)) ([93af64e](https://github.com/fagemx/vm0/commit/93af64efbe0c8b891e8387ec21089508c02adcf4))
+* **cli:** route error messages to stderr per CLI design guideline ([#2609](https://github.com/fagemx/vm0/issues/2609)) ([a993299](https://github.com/fagemx/vm0/commit/a993299c2705bf945d7309cf5c42148c38cd1a29))
+* **cli:** route run-failed output to stderr ([#2610](https://github.com/fagemx/vm0/issues/2610)) ([97e1081](https://github.com/fagemx/vm0/commit/97e1081e72c1b44501450c106e3bb6a94a6abd39))
+* **cli:** support repository root GitHub URLs in vm0 compose ([#2427](https://github.com/fagemx/vm0/issues/2427)) ([6c0ba38](https://github.com/fagemx/vm0/commit/6c0ba385bdca8a63d1bff03840d0595150d78cd4)), closes [#2423](https://github.com/fagemx/vm0/issues/2423)
+* **cli:** test release-please cli version bump ([#3179](https://github.com/fagemx/vm0/issues/3179)) ([8eb6b9e](https://github.com/fagemx/vm0/commit/8eb6b9e811ac438d2788181fc6f3e5c70890dd53))
+* **cli:** use fake timers in usage tests to avoid time-dependent failures ([#3032](https://github.com/fagemx/vm0/issues/3032)) ([9cd34bf](https://github.com/fagemx/vm0/commit/9cd34bfe0a4b7d1ca3fe3f413fca2ab9d7edf6b5))
+* **cli:** use nullish coalescing for sentry environment fallback ([#2709](https://github.com/fagemx/vm0/issues/2709)) ([b70248f](https://github.com/fagemx/vm0/commit/b70248fa7e0685091ddbbdd3de2f7a2747df23c8))
+* **core:** handle trailing slashes in GitHub URL parsing ([#2459](https://github.com/fagemx/vm0/issues/2459)) ([10226c7](https://github.com/fagemx/vm0/commit/10226c74372cfd3a9e9f08295ad086c41e80acc7)), closes [#2455](https://github.com/fagemx/vm0/issues/2455)
+* **dev:** change pre-commit hooks to serial execution ([#2422](https://github.com/fagemx/vm0/issues/2422)) ([2505c13](https://github.com/fagemx/vm0/commit/2505c13d11bb38376b3e6343a051a7814b011a61))
+* **e2e:** make agent names unique to prevent compose config collisions ([#3147](https://github.com/fagemx/vm0/issues/3147)) ([022c83f](https://github.com/fagemx/vm0/commit/022c83fcb4dd21135b50964d71f8cac193d42254))
+* **e2e:** make secret and variable names unique in t20-schedule test ([#3149](https://github.com/fagemx/vm0/issues/3149)) ([4ef861f](https://github.com/fagemx/vm0/commit/4ef861f72b361bf9a66201f512e58a8d65a40261))
+* exclude connector-provided secrets from missing-secrets checks ([#2752](https://github.com/fagemx/vm0/issues/2752)) ([3dc98d4](https://github.com/fagemx/vm0/commit/3dc98d47451a2084b50a9a6ebce2f2ccb31d2833)), closes [#2747](https://github.com/fagemx/vm0/issues/2747)
+* **runner:** add path validation and ci hash guards ([#3161](https://github.com/fagemx/vm0/issues/3161)) ([c5313ff](https://github.com/fagemx/vm0/commit/c5313ffdaee030c5fb3d48b950c8d7b6e36e90ae))
+* **schedule:** validate secrets/vars against platform tables ([#2558](https://github.com/fagemx/vm0/issues/2558)) ([f19d550](https://github.com/fagemx/vm0/commit/f19d5506e61f16536bf163e5884266d31326fe40))
+* **test:** remove vi.unstubAllEnvs from CLI tests and fix compose job race condition ([#2695](https://github.com/fagemx/vm0/issues/2695)) ([04ab29b](https://github.com/fagemx/vm0/commit/04ab29bf89201bb921d6a2f63b9ea4e3f2ab899d))
+* **web:** disable json query to fix flaky ambiguous-prefix test ([#2701](https://github.com/fagemx/vm0/issues/2701)) ([a5f8e8a](https://github.com/fagemx/vm0/commit/a5f8e8a375a3a84c46518780201b66f75ea845a3))
+
+
+### Performance Improvements
+
+* **ci:** deploy runner to all metal hosts in parallel ([#3134](https://github.com/fagemx/vm0/issues/3134)) ([88152d3](https://github.com/fagemx/vm0/commit/88152d30f602490b463ce6049d327c67d21516cb))
+* **ci:** increase runner e2e parallelism to 5 per host ([#3135](https://github.com/fagemx/vm0/issues/3135)) ([d81e066](https://github.com/fagemx/vm0/commit/d81e066c9b6b3520ba6a734b0b62bd2ddb030f5f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @vm0/core bumped to 8.19.0
+
 ## [9.38.1](https://github.com/vm0-ai/vm0/compare/cli-v9.38.0...cli-v9.38.1) (2026-02-18)
 
 
