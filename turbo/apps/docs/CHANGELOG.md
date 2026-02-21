@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.14.0](https://github.com/fagemx/vm0/compare/docs-v2.13.0...docs-v2.14.0) (2026-02-21)
+
+
+### Features
+
+* **docs:** add ecosystem section with slack integration guide ([#2635](https://github.com/fagemx/vm0/issues/2635)) ([3a0d45a](https://github.com/fagemx/vm0/commit/3a0d45a84e8bc834bb409d39d109e2dd7ef3a844))
+* **docs:** update slack docs and rename ecosystem to integrations ([#2917](https://github.com/fagemx/vm0/issues/2917)) ([fe90cd9](https://github.com/fagemx/vm0/commit/fe90cd90aa92291fd3f277ca324dd9f43d76b6ac))
+* **self-host:** add docker compose setup ([#2853](https://github.com/fagemx/vm0/issues/2853)) ([bd757fd](https://github.com/fagemx/vm0/commit/bd757fd21385dca449e82f6880bc5265dcf1b80d))
+
+
+### Bug Fixes
+
+* **docs:** update aws bedrock setup guide url ([#2495](https://github.com/fagemx/vm0/issues/2495)) ([8026a4a](https://github.com/fagemx/vm0/commit/8026a4a185ebea25738d580ebe8cda5ea067d59e))
+
 ## [2.13.0](https://github.com/vm0-ai/vm0/compare/docs-v2.12.0...docs-v2.13.0) (2026-02-12)
 
 

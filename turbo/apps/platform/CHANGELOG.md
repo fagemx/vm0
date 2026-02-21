@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.69.0](https://github.com/fagemx/vm0/compare/platform-v0.68.4...platform-v0.69.0) (2026-02-21)
+
+
+### Features
+
+* add computer connector api for authenticated local tunneling via ngrok ([#2937](https://github.com/fagemx/vm0/issues/2937)) ([4f3fc4e](https://github.com/fagemx/vm0/commit/4f3fc4ebf137409a30b85b5882634a6bb8846836))
+* add dual-mode data provider to sync-env.sh ([#2496](https://github.com/fagemx/vm0/issues/2496)) ([1ccff32](https://github.com/fagemx/vm0/commit/1ccff32ad5cb7feca4d6b16b8ec548c1283295bd))
+* add gmail connector with nango platform integration ([#3065](https://github.com/fagemx/vm0/issues/3065)) ([d43dfe1](https://github.com/fagemx/vm0/commit/d43dfe1a5a868c8413ffd2b8a250d48dafc791cb))
+* add markdown preview for prompts, slack image hints, and platform tests ([#2991](https://github.com/fagemx/vm0/issues/2991)) ([35da51b](https://github.com/fagemx/vm0/commit/35da51b563330c45444e1cb16b3de566519d2c07))
+* **api:** add backend support for agent detail page ([#2979](https://github.com/fagemx/vm0/issues/2979)) ([4103d8f](https://github.com/fagemx/vm0/commit/4103d8f66ccc9546bccc67454d139b8d1de04599))
+* **deploy:** add self-hosted deployment support with docker and local auth ([#2718](https://github.com/fagemx/vm0/issues/2718)) ([498da5e](https://github.com/fagemx/vm0/commit/498da5e0a411a034df83c18c00fc287143dc0259))
+* improve model provider descriptions and ui ([#2500](https://github.com/fagemx/vm0/issues/2500)) ([435ac6c](https://github.com/fagemx/vm0/commit/435ac6c4b9091578463a55d614dc81975a9924ad))
+* owner inline editing for agent instructions ([#3015](https://github.com/fagemx/vm0/issues/3015)) ([e7022c8](https://github.com/fagemx/vm0/commit/e7022c848b7b247ee6f2475c204bfb656588c5ad))
+* **platform:** add agent detail page with feature flag gating ([#2998](https://github.com/fagemx/vm0/issues/2998)) ([5386de0](https://github.com/fagemx/vm0/commit/5386de0662eb2a85e69040788e2ca08e7f976cba))
+* **platform:** add agent detail routes and shared signals ([#2989](https://github.com/fagemx/vm0/issues/2989)) ([ddf6fca](https://github.com/fagemx/vm0/commit/ddf6fca91c2737231a75b77beca2efb3d9bdc8f4))
+* **platform:** add agent logs and connections pages ([#3017](https://github.com/fagemx/vm0/issues/3017)) ([cf943b2](https://github.com/fagemx/vm0/commit/cf943b224b55438152ee67d339c60894709133a8))
+* **platform:** add config dialog and run dialog for agent detail page ([#3016](https://github.com/fagemx/vm0/issues/3016)) ([7811f00](https://github.com/fagemx/vm0/commit/7811f0045c022856d283174722cfacf6ced72b7f))
+* **platform:** add connector management to settings page ([#2769](https://github.com/fagemx/vm0/issues/2769)) ([418bc1e](https://github.com/fagemx/vm0/commit/418bc1e2dd6afb94b3caca84abf260bf542359c8)), closes [#2766](https://github.com/fagemx/vm0/issues/2766)
+* **platform:** add connector-based environment variable setup ([#2847](https://github.com/fagemx/vm0/issues/2847)) ([7a0004f](https://github.com/fagemx/vm0/commit/7a0004f3c0436e53d591f1308b7ec5b59d56f226))
+* **platform:** add environment variables setup page ([#2737](https://github.com/fagemx/vm0/issues/2737)) ([d33842a](https://github.com/fagemx/vm0/commit/d33842a2e5e72eb5bfebe66cd442135b49f35a51))
+* **platform:** add incremental polling for log detail auto-refresh ([#2716](https://github.com/fagemx/vm0/issues/2716)) ([aad0134](https://github.com/fagemx/vm0/commit/aad0134608f0d8af1f55bbe6cda6bcac8972d451))
+* **platform:** add lint rule enforcing render mode in tests ([#2802](https://github.com/fagemx/vm0/issues/2802)) ([2c8de3b](https://github.com/fagemx/vm0/commit/2c8de3b70741f74ea56c17c3f64cdb1f974d7965))
+* **platform:** add secret/variable settings page with tabs and url deep-linking ([#2624](https://github.com/fagemx/vm0/issues/2624)) ([dac5bad](https://github.com/fagemx/vm0/commit/dac5badf4773b7602ceca837a224eb58220f4b5e))
+* **platform:** collapse consecutive same-type tool calls in log detail ([#2560](https://github.com/fagemx/vm0/issues/2560)) ([71091bc](https://github.com/fagemx/vm0/commit/71091bc1599fcfde7b1894563731ade9dbd9a680))
+* **platform:** detect and display missing secrets for agents ([#2664](https://github.com/fagemx/vm0/issues/2664)) ([e43fb63](https://github.com/fagemx/vm0/commit/e43fb63d574f3f614254e702c76270b59381fedf))
+* **platform:** display user prompt in log detail page ([#2535](https://github.com/fagemx/vm0/issues/2535)) ([80d1d37](https://github.com/fagemx/vm0/commit/80d1d37c6beefbf436ccacf0543e561981defee4))
+* **platform:** improve mobile responsiveness and ux ([#2616](https://github.com/fagemx/vm0/issues/2616)) ([aa0dad0](https://github.com/fagemx/vm0/commit/aa0dad03aa4b89a2d4cd8e914226482247bc39ac))
+* **platform:** make agents table rows fully clickable ([#2438](https://github.com/fagemx/vm0/issues/2438)) ([5771131](https://github.com/fagemx/vm0/commit/5771131b92ddde046e28b06e4e403b48ae047a0c))
+* **platform:** model provider settings page with full CRUD management ([#2469](https://github.com/fagemx/vm0/issues/2469)) ([0f9fd01](https://github.com/fagemx/vm0/commit/0f9fd01a574011c940c1b4d1653fa76161a2c7f3))
+* **platform:** optimize logs page navigation for instant feedback ([#2577](https://github.com/fagemx/vm0/issues/2577)) ([f874e37](https://github.com/fagemx/vm0/commit/f874e375b8091c9fe006c021d307021a5d161995))
+* **platform:** polish logs page ui with skeletons and refined copy ([#2428](https://github.com/fagemx/vm0/issues/2428)) ([0050775](https://github.com/fagemx/vm0/commit/005077591a8bdc9891f2b9e7745553514f74a29c))
+* **settings:** improve ui consistency and add success notifications ([#2976](https://github.com/fagemx/vm0/issues/2976)) ([6418997](https://github.com/fagemx/vm0/commit/6418997a206901e7739c6398c9129474449c0e66))
+* **slack:** move settings to platform integrations page ([#2797](https://github.com/fagemx/vm0/issues/2797)) ([030e41f](https://github.com/fagemx/vm0/commit/030e41fa55e7f7eeebb811f6619ad84c954de173))
+* **slack:** redirect to provider setup after connect ([#2854](https://github.com/fagemx/vm0/issues/2854)) ([3701bf6](https://github.com/fagemx/vm0/commit/3701bf66ad61c8d2ed525e2f97547cfa4bca8d82))
+* **web:** handle agent timeout with user notification in Slack threads ([#2563](https://github.com/fagemx/vm0/issues/2563)) ([00456d8](https://github.com/fagemx/vm0/commit/00456d841dde7fed7e848cbab41bb6236c34ffe7))
+
+
+### Bug Fixes
+
+* **ci:** update platform deployment to use unified clerk env var ([#2502](https://github.com/fagemx/vm0/issues/2502)) ([f63ae57](https://github.com/fagemx/vm0/commit/f63ae575aff0b7d4549abdf141af5ebe05086a7d))
+* hide connect button while polling ([#3107](https://github.com/fagemx/vm0/issues/3107)) ([be3af5d](https://github.com/fagemx/vm0/commit/be3af5da3a372d5f110410279e10db860dfabf75))
+* **platform:** connector setup improvements and trailing ? fix ([#2857](https://github.com/fagemx/vm0/issues/2857)) ([5f65661](https://github.com/fagemx/vm0/commit/5f656610669ccc9999d709f0b8f06f6f15f4ef49))
+* **platform:** display actual model provider name in agents table ([#2524](https://github.com/fagemx/vm0/issues/2524)) ([99e3791](https://github.com/fagemx/vm0/commit/99e379185ea2ea0caf6d727c8ad065a232fd1ce6))
+* **platform:** enforce MSW onUnhandledRequest error mode ([#2791](https://github.com/fagemx/vm0/issues/2791)) ([ce092a5](https://github.com/fagemx/vm0/commit/ce092a514d198fef5cb90b0ae72818c874c2a383))
+* **platform:** fix agents page missing vars, connector suggestions, and stale state ([#2946](https://github.com/fagemx/vm0/issues/2946)) ([b20addf](https://github.com/fagemx/vm0/commit/b20addf0266a0326ee5f263d54ba299f7e71546e))
+* **platform:** fix bash error overflow and markdown table light mode ([#2891](https://github.com/fagemx/vm0/issues/2891)) ([98c89fd](https://github.com/fagemx/vm0/commit/98c89fd53acfe601bc818b1b48b5d67e30676374))
+* **platform:** improve environment-variables-setup connector UI ([#2932](https://github.com/fagemx/vm0/issues/2932)) ([fbc02b1](https://github.com/fagemx/vm0/commit/fbc02b16f832ee35fe914210f5cd1224737bf973))
+* **platform:** improve onboarding modal layout and scrolling ([#2521](https://github.com/fagemx/vm0/issues/2521)) ([bbfe6aa](https://github.com/fagemx/vm0/commit/bbfe6aac1a10d3c7bee54a28fb9d6028a0d52985))
+* **platform:** persist model selection for providers with predefined models ([#2925](https://github.com/fagemx/vm0/issues/2925)) ([cf014c0](https://github.com/fagemx/vm0/commit/cf014c0a6c4a439748251023937b97f5d60dcf6c)), closes [#2923](https://github.com/fagemx/vm0/issues/2923)
+* **platform:** prevent layout overlap in logs detail page on mobile ([#2418](https://github.com/fagemx/vm0/issues/2418)) ([5c732bb](https://github.com/fagemx/vm0/commit/5c732bb3ec23cf31caaefd1c4ac65f149332bc95))
+* **platform:** show skeleton loading state instead of flashing empty state in secrets/vars lists ([#2840](https://github.com/fagemx/vm0/issues/2840)) ([cab7682](https://github.com/fagemx/vm0/commit/cab7682483252324f0d4e14dfa07b67fceb5ac0a)), closes [#2658](https://github.com/fagemx/vm0/issues/2658)
+* **platform:** show workspace agent in slack settings when not owned by user ([#2918](https://github.com/fagemx/vm0/issues/2918)) ([07f5451](https://github.com/fagemx/vm0/commit/07f54516e32bca44c3fa61cff0b696a390cf741c))
+* **platform:** sort events by sequenceNumber before grouping to fix unknown tool results ([#2556](https://github.com/fagemx/vm0/issues/2556)) ([430ddcb](https://github.com/fagemx/vm0/commit/430ddcbb99daf813617e68b4c38d821454cb62d8)), closes [#2549](https://github.com/fagemx/vm0/issues/2549)
+* **platform:** use simple box icon for collapsed sidebar logo ([#2623](https://github.com/fagemx/vm0/issues/2623)) ([1b26059](https://github.com/fagemx/vm0/commit/1b26059ce80ceec9ce1b282249334d30b9554c9a))
+* **platform:** wrap error messages to prevent horizontal scroll ([#2454](https://github.com/fagemx/vm0/issues/2454)) ([2391be6](https://github.com/fagemx/vm0/commit/2391be6cd22ecca8e9c6cdeba04df72b971cf667)), closes [#2450](https://github.com/fagemx/vm0/issues/2450)
+* remove nango integration and simplify oauth flow ([#3105](https://github.com/fagemx/vm0/issues/3105)) ([a1c601e](https://github.com/fagemx/vm0/commit/a1c601e2217456d16b1e34de0a41fe61a0026e7a))
+* sanitize mock data and rename platform env var ([#2912](https://github.com/fagemx/vm0/issues/2912)) ([b56b513](https://github.com/fagemx/vm0/commit/b56b513076eddc3d25b4e106e005b2ab9bc4f518))
+
+
+### Performance Improvements
+
+* **platform:** skip rendering in signal-only tests ([#2798](https://github.com/fagemx/vm0/issues/2798)) ([e438809](https://github.com/fagemx/vm0/commit/e4388091362b0e7812ea859c9a085061a99a6acf))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @vm0/core bumped to 8.19.0
+
 ## [0.68.4](https://github.com/vm0-ai/vm0/compare/platform-v0.68.3...platform-v0.68.4) (2026-02-18)
 
 
